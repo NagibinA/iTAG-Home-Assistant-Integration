@@ -2,7 +2,7 @@
     "domain": "itag_tracker",
     "name": "iTAG Tracker",
     "version": "1.0.0",
-    "requirements": [],
+    "requirements": ["bleak>=0.21.0"],
     "dependencies": [],
     "codeowners": ["@NagibinA"],
     "config_flow": true,
