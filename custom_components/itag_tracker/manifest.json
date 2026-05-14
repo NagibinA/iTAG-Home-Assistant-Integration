@@ -1,0 +1,16 @@
+{
+    "domain": "itag_tracker",
+    "name": "iTAG Tracker",
+    "version": "1.0.0",
+    "requirements": [
+        "bleak>=0.21.0",
+        "pybluez>=0.23"
+    ],
+    "dependencies": [],
+    "codeowners": ["@NagibinA"],
+    "config_flow": true,
+    "iot_class": "local_polling",
+    "documentation": "https://github.com/NagibinA/iTAG-Home-Assistant-Integration",
+    "issue_tracker": "https://github.com/NagibinA/iTAG-Home-Assistant-Integration/issues",
+    "homeassistant": "2023.8.0"
+}
