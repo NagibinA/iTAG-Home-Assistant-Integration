@@ -1,0 +1,18 @@
+alert:
+  name: iTAG Alert
+  description: Make the iTAG beep for finding
+  target:
+    entity:
+      integration: itag_tracker
+      domain: sensor
+  fields:
+    duration:
+      name: Duration
+      description: Duration of beep in seconds
+      required: false
+      default: 10
+      selector:
+        number:
+          min: 1
+          max: 30
+          unit_of_measurement: seconds
