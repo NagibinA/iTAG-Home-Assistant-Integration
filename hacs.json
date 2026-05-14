@@ -1,0 +1,7 @@
+{
+    "name": "iTAG Tracker",
+    "render_readme": true,
+    "domains": ["sensor", "binary_sensor"],
+    "iot_class": ["Local Polling", "Local Push"],
+    "homeassistant": "2023.8.0"
+}
