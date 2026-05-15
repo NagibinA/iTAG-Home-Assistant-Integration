@@ -5,9 +5,8 @@ import asyncio
 from datetime import datetime
 
 from homeassistant.components.binary_sensor import BinarySensorEntity
-from homeassistant.helpers import device_registry as dr
 
-from .const import DOMAIN, BUTTON_CHAR
+from .const import DOMAIN
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -16,17 +15,26 @@ async def async_setup_entry(hass, entry, async_add_entities):
     """Настройка сенсора кнопки iTAG."""
     mac = entry.data["mac_address"]
     name = entry.data["name"]
+    tracker = hass.data[DOMAIN][entry.entry_id]["tracker"]
 
-    async_add_entities([iTAGButtonSensor(entry, mac, name)], True)
+    button_sensor = iTAGButtonSensor(entry, mac, name, tracker)
+    async_add_entities([button_sensor], True)
+    
+    # Устанавливаем callback от tracker
+    async def button_callback():
+        await button_sensor.async_update()
+    
+    tracker.set_button_callback(button_callback)
 
 
 class iTAGButtonSensor(BinarySensorEntity):
     """Сенсор кнопки iTAG."""
 
-    def __init__(self, entry, mac, name):
+    def __init__(self, entry, mac, name, tracker):
         self._entry = entry
         self._mac = mac
         self._name = name
+        self._tracker = tracker
         self._attr_name = f"{name} Button"
         self._attr_unique_id = f"{mac}_button"
         self._attr_icon = "mdi:gesture-tap-button"
@@ -37,7 +45,6 @@ class iTAGButtonSensor(BinarySensorEntity):
     def device_info(self):
         return {
             "identifiers": {(DOMAIN, self._mac)},
-            "name": self._name,
         }
 
     @property
@@ -47,29 +54,19 @@ class iTAGButtonSensor(BinarySensorEntity):
         return {}
 
     async def async_update(self):
-        """Проверка нажатия кнопки."""
-        try:
-            from bleak import BleakClient
+        """Обновление состояния кнопки."""
+        pass
 
-            async with BleakClient(self._mac, timeout=3.0) as client:
-                await client.start_notify(BUTTON_CHAR, self._button_handler)
-                await asyncio.sleep(0.3)
-                await client.stop_notify(BUTTON_CHAR)
-
-        except Exception:
-            pass  # Тихая ошибка, не спамим лог
-
-    def _button_handler(self, sender, data):
-        """Обработчик нажатия кнопки."""
-        if len(data) > 0 and data[0] == 0x01:
-            self._attr_is_on = True
-            self._last_press = datetime.now().isoformat()
-            _LOGGER.info(f"{self._name} button pressed")
-
-            async def reset():
-                await asyncio.sleep(1)
-                self._attr_is_on = False
-                self.async_write_ha_state()
-
-            asyncio.create_task(reset())
+    def set_pressed(self):
+        """Вызывается из tracker при нажатии кнопки."""
+        self._attr_is_on = True
+        self._last_press = datetime.now().isoformat()
+        _LOGGER.info(f"{self._name} button pressed")
+        self.async_write_ha_state()
+        
+        async def reset():
+            await asyncio.sleep(1)
+            self._attr_is_on = False
             self.async_write_ha_state()
+        
+        asyncio.create_task(reset())

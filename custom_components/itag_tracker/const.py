@@ -10,14 +10,14 @@ CHARGE_LVL = "00002a19-0000-1000-8000-00805f9b34fb"
 BUTTON_CHAR = "0000ffe1-0000-1000-8000-00805f9b34fb"
 
 # Константы для расчёта расстояния по RSSI
-DEFAULT_TX_POWER = -59
-ENVIRONMENT_FACTOR = 2.5
+DEFAULT_TX_POWER = -59  # dBm на расстоянии 1 метр
+ENVIRONMENT_FACTOR = 2.5  # коэффициент среды (квартира)
 
-# Интервалы обновления (в секундах)
-PRESENCE_SCAN_INTERVAL = 30
-BATTERY_UPDATE_INTERVAL = 3600
+# Пороги для присутствия
+RSSI_PRESENCE_THRESHOLD = -80  # Если RSSI выше -80 -> брелок рядом
+CONNECTION_TIMEOUT = 30  # Секунд без сигнала -> отключаемся
 
 # Уровни расстояния (в метрах)
-DISTANCE_CLOSE = 1.0
-DISTANCE_MEDIUM = 3.0
-DISTANCE_FAR = 10.0
+DISTANCE_CLOSE = 1.0    # близко: < 1 м
+DISTANCE_MEDIUM = 3.0   # средне: 1-3 м
+DISTANCE_FAR = 10.0     # далеко: 3-10 м, > 10 м - очень далеко
