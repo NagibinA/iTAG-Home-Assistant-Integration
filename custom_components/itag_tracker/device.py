@@ -1,9 +1,9 @@
-"""iTAG device handler - persistent connection."""
+"""iTAG device handler - persistent connection with retry."""
 from __future__ import annotations
 
 import asyncio
 import logging
-from bleak import BleakClient
+from bleak_retry_connector import establish_connection, BleakClientWithServiceCache
 from homeassistant.components import bluetooth
 from homeassistant.core import HomeAssistant
 
@@ -30,6 +30,7 @@ class ITAGDevice:
         self._client = None
         self._is_connected = False
         self._read_task = None
+        self._device = None
 
     @property
     def rssi(self) -> int | None:
@@ -57,9 +58,12 @@ class ITAGDevice:
         if service_info and service_info.rssi is not None:
             self._rssi = service_info.rssi
             self._available = True
+            self._device = bluetooth.async_ble_device_from_address(
+                self.hass, self.mac, connectable=True
+            )
             
             # Если нет соединения и нет задачи чтения - запускаем
-            if not self._is_connected and not self._read_task:
+            if not self._is_connected and not self._read_task and self._device:
                 _LOGGER.info("Starting persistent connection...")
                 self._read_task = asyncio.create_task(self._persistent_connection())
         else:
@@ -70,10 +74,15 @@ class ITAGDevice:
     async def _persistent_connection(self) -> None:
         """Maintain persistent connection and read data periodically."""
         try:
-            # Подключаемся
-            _LOGGER.info("Connecting to %s...", self.mac)
-            self._client = BleakClient(self.mac, timeout=CONNECT_TIMEOUT)
-            await self._client.connect()
+            # Подключаемся с retry
+            _LOGGER.info("Connecting to %s with retry...", self.mac)
+            self._client = await establish_connection(
+                BleakClientWithServiceCache,
+                self._device,
+                self.name,
+                max_attempts=3,
+                timeout=CONNECT_TIMEOUT,
+            )
             
             if not self._client.is_connected:
                 _LOGGER.error("Failed to connect")
@@ -99,9 +108,9 @@ class ITAGDevice:
                 
                 self._rssi = service_info.rssi
                 
-                # Читаем батарею (раз в 60 секунд, примерно каждые 60 итераций)
+                # Читаем батарею (раз в 60 секунд)
                 read_count += 1
-                if read_count >= 60:  # ~60 секунд
+                if read_count >= 60:
                     read_count = 0
                     try:
                         battery_data = await self._client.read_gatt_char(BATTERY_SERVICE_UUID)
@@ -123,7 +132,7 @@ class ITAGDevice:
                 except Exception as e:
                     _LOGGER.debug("Button read error: %s", e)
                 
-                await asyncio.sleep(1)  # Пауза 1 секунда между чтениями
+                await asyncio.sleep(1)  # Пауза 1 секунда
                 
         except asyncio.CancelledError:
             _LOGGER.debug("Connection task cancelled")
