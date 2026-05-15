@@ -1,4 +1,4 @@
-"""Device tracker для iTAG: управление подключением, присутствие, RSSI."""
+"""Device tracker для iTAG."""
 
 import logging
 import asyncio
@@ -20,7 +20,7 @@ _LOGGER = logging.getLogger(__name__)
 
 
 class iTAGDeviceTracker(ScannerEntity):
-    """Отслеживание iTAG с активным подключением."""
+    """Отслеживание iTAG."""
 
     def __init__(self, hass, entry):
         self.hass = hass
@@ -29,25 +29,20 @@ class iTAGDeviceTracker(ScannerEntity):
         self._name = entry.data["name"]
         self._attr_name = self._name
         self._attr_unique_id = f"{self._mac}_tracker"
-        
-        # Состояния
+
         self._is_present = False
         self._rssi = None
         self._last_seen = None
         self._battery = None
-        
-        # Управление
+
         self._client = None
         self._scan_task = None
         self._running = False
         self._last_rssi_update = None
-        
-        # Для callback от кнопки
         self._button_callback = None
 
     @property
     def device_info(self):
-        """Привязываем к устройству."""
         mac_normalized = self._mac.replace(":", "")
         return {
             "identifiers": {(DOMAIN, mac_normalized)},
@@ -96,75 +91,86 @@ class iTAGDeviceTracker(ScannerEntity):
         while self._running:
             try:
                 device = await BleakScanner.find_device_by_address(self._mac, timeout=5)
-                
+
                 if device:
                     self._rssi = device.rssi
                     self._last_seen = datetime.now().isoformat()
                     self._last_rssi_update = datetime.now()
-                    
+
                     if not self._client and device.rssi > RSSI_PRESENCE_THRESHOLD:
                         await self._connect()
-                    
+
                     self._is_present = device.rssi > RSSI_PRESENCE_THRESHOLD
-                    
+
                     _LOGGER.debug(
-                        f"{self._name} RSSI: {device.rssi} dBm, present: {self._is_present}"
+                        "%s RSSI: %s dBm, present: %s",
+                        self._name,
+                        device.rssi,
+                        self._is_present,
                     )
                 else:
                     self._rssi = None
                     self._is_present = False
                     if self._client:
                         await self._disconnect()
-                
+
                 if self._client and self._last_rssi_update:
                     delta = (datetime.now() - self._last_rssi_update).total_seconds()
                     if delta > CONNECTION_TIMEOUT:
-                        _LOGGER.debug(f"{self._name} timeout, disconnecting")
+                        _LOGGER.debug("%s timeout, disconnecting", self._name)
                         await self._disconnect()
-                
+
                 self.async_write_ha_state()
-                
+
             except Exception as e:
-                _LOGGER.debug(f"Scan loop error: {e}")
-            
+                _LOGGER.debug("Scan loop error: %s", e)
+
             await asyncio.sleep(5)
 
     async def _connect(self):
         try:
-            _LOGGER.info(f"Connecting to {self._name} ({self._mac})...")
-            
+            _LOGGER.info("Connecting to %s (%s)...", self._name, self._mac)
+
             self._client = BleakClient(self._mac, timeout=10.0)
             await self._client.connect()
-            
+
             battery_char = await self._client.read_gatt_char(CHARGE_LVL)
             self._battery = int(battery_char[0])
-            _LOGGER.info(f"{self._name} battery: {self._battery}%")
-            
+            _LOGGER.info("%s battery: %s%%", self._name, self._battery)
+
             await self._client.start_notify(BUTTON_CHAR, self._button_notify_handler)
-            _LOGGER.info(f"{self._name} button notifications enabled")
-            
-            _LOGGER.info(f"{self._name} connected successfully")
-            
+            _LOGGER.info("%s button notifications enabled", self._name)
+
+            _LOGGER.info("%s connected successfully", self._name)
+
         except Exception as e:
-            _LOGGER.error(f"Connection failed for {self._name}: {e}")
+            _LOGGER.error("Connection failed for %s: %s", self._name, e)
             await self._disconnect()
 
     async def _disconnect(self):
         if self._client:
             try:
                 await self._client.stop_notify(BUTTON_CHAR)
-            except:
+            except Exception:
                 pass
             try:
                 await self._client.disconnect()
-            except:
+            except Exception:
                 pass
             self._client = None
             self._battery = None
-            _LOGGER.debug(f"{self._name} disconnected")
+            _LOGGER.debug("%s disconnected", self._name)
 
     def _button_notify_handler(self, sender, data):
         if len(data) > 0 and data[0] == 0x01:
-            _LOGGER.info(f"{self._name} button pressed")
+            _LOGGER.info("%s button pressed", self._name)
             if self._button_callback:
                 self.hass.async_create_task(self._button_callback())
+
+
+# ✅ ОБЯЗАТЕЛЬНАЯ функция для device_tracker платформы
+async def async_setup_entry(hass, entry, async_add_entities):
+    """Настройка device tracker платформы."""
+    tracker = hass.data[DOMAIN][entry.entry_id]["tracker"]
+    async_add_entities([tracker], True)
+    _LOGGER.info("Device tracker entity added for %s", entry.data["name"])
