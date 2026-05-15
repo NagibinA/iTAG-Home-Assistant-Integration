@@ -1,8 +1,8 @@
 {
   "domain": "itag_tracker",
   "name": "iTAG BLE Tracker",
-  "version": "1.0.9",
-  "requirements": ["bleak>=0.21.0", "bleak-retry-connector>=3.0.0"],
+  "version": "1.0.0",
+  "requirements": ["bleak-retry-connector>=3.0.0"],
   "dependencies": ["bluetooth"],
   "codeowners": ["@NagibinA"],
   "config_flow": true,
