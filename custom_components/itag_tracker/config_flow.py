@@ -1,22 +1,14 @@
 """Config flow для iTAG Tracker."""
 
-import voluptuous as vol
 import re
-
+import voluptuous as vol
 from homeassistant import config_entries
-from homeassistant.core import callback
-
 from .const import DOMAIN
 
 
 def is_valid_mac(mac: str) -> bool:
     """Проверка формата MAC-адреса."""
     return bool(re.match(r"^([0-9A-Fa-f]{2}:){5}[0-9A-Fa-f]{2}$", mac))
-
-
-def normalize_mac(mac: str) -> str:
-    """Нормализация MAC-адреса."""
-    return mac.upper()
 
 
 class iTAGConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
@@ -30,7 +22,7 @@ class iTAGConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
 
         if user_input is not None:
             name = user_input["name"].strip()
-            mac = normalize_mac(user_input["mac_address"])
+            mac = user_input["mac_address"].upper()
 
             if not is_valid_mac(mac):
                 errors["mac_address"] = "invalid_mac"
