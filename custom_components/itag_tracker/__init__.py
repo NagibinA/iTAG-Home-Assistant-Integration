@@ -19,7 +19,6 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     name = entry.data["name"]
     mac_normalized = mac.replace(":", "")
 
-    # Регистрируем устройство
     device_registry = dr.async_get(hass)
     device_registry.async_get_or_create(
         config_entry_id=entry.entry_id,
@@ -30,7 +29,6 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
         connections={(dr.CONNECTION_BLUETOOTH, mac)},
     )
 
-    # Сохраняем данные
     hass.data.setdefault(DOMAIN, {})
     hass.data[DOMAIN][entry.entry_id] = {
         "mac": mac,
@@ -38,18 +36,15 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
         "mac_normalized": mac_normalized,
     }
 
-    # Создаём трекер
     tracker = iTAGDeviceTracker(hass, entry)
     hass.data[DOMAIN][entry.entry_id]["tracker"] = tracker
 
-    # Запускаем трекер
     try:
         await tracker.start()
     except Exception as e:
         _LOGGER.error("Failed to start tracker: %s", e)
         return False
 
-    # Настраиваем платформы
     await hass.config_entries.async_forward_entry_setups(entry, PLATFORMS)
 
     _LOGGER.info("iTAG Tracker setup complete for %s", name)
