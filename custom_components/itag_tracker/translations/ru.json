@@ -9,12 +9,14 @@
                     "mac_address": "MAC-адрес"
                 },
                 "data_description": {
+                    "name": "Удобное имя для идентификации",
                     "mac_address": "Пример: AA:BB:CC:DD:EE:FF"
                 }
             }
         },
         "error": {
-            "invalid_mac": "Неверный формат MAC-адреса. Используйте AA:BB:CC:DD:EE:FF"
+            "invalid_mac": "Неверный формат MAC-адреса. Используйте AA:BB:CC:DD:EE:FF",
+            "invalid_name": "Имя не может быть пустым"
         },
         "abort": {
             "already_configured": "Устройство с таким MAC-адресом уже добавлено"
@@ -22,29 +24,18 @@
     },
     "entity": {
         "sensor": {
-            "itag_battery": {
+            "battery": {
                 "name": "Батарея"
-            },
-            "itag_distance": {
-                "name": "Расстояние"
             }
         },
         "binary_sensor": {
-            "itag_button": {
-                "name": "Кнопка",
-                "state": {
-                    "on": "Нажата",
-                    "off": "Отпущена"
-                }
+            "button": {
+                "name": "Кнопка"
             }
         },
         "device_tracker": {
-            "itag_tracker": {
-                "name": "Присутствие",
-                "state": {
-                    "home": "Дома",
-                    "not_home": "Не дома"
-                }
+            "device_tracker": {
+                "name": "Присутствие"
             }
         }
     }
