@@ -4,6 +4,7 @@ import voluptuous as vol
 import re
 
 from homeassistant import config_entries
+from homeassistant.core import callback
 
 from .const import DOMAIN
 
@@ -11,6 +12,11 @@ from .const import DOMAIN
 def is_valid_mac(mac: str) -> bool:
     """Проверка формата MAC-адреса."""
     return bool(re.match(r"^([0-9A-Fa-f]{2}:){5}[0-9A-Fa-f]{2}$", mac))
+
+
+def normalize_mac(mac: str) -> str:
+    """Нормализация MAC-адреса."""
+    return mac.upper()
 
 
 class iTAGConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
@@ -23,18 +29,21 @@ class iTAGConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
         errors = {}
 
         if user_input is not None:
-            mac = user_input["mac_address"].upper()
+            name = user_input["name"].strip()
+            mac = normalize_mac(user_input["mac_address"])
 
             if not is_valid_mac(mac):
                 errors["mac_address"] = "invalid_mac"
+            elif not name:
+                errors["name"] = "invalid_name"
             else:
                 await self.async_set_unique_id(mac)
                 self._abort_if_unique_id_configured()
 
                 return self.async_create_entry(
-                    title=user_input["name"],
+                    title=name,
                     data={
-                        "name": user_input["name"],
+                        "name": name,
                         "mac_address": mac,
                     },
                 )
