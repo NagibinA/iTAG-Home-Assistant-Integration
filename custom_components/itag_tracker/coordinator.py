@@ -1,4 +1,4 @@
-"""Координатор для iTAG — диагностика структуры данных."""
+"""Координатор для iTAG — показываем всё содержимое."""
 
 import logging
 from datetime import timedelta
@@ -26,7 +26,7 @@ class iTAGDataUpdateCoordinator(DataUpdateCoordinator):
         self.is_available = False
 
     async def _async_update_data(self):
-        _LOGGER.info("=== iTAG DEBUG: Scanning ===")
+        _LOGGER.info("=== iTAG DEBUG ===")
         
         try:
             scanner = async_get_scanner(self.hass)
@@ -35,55 +35,55 @@ class iTAGDataUpdateCoordinator(DataUpdateCoordinator):
                 _LOGGER.error("Bluetooth scanner not available!")
                 return {"rssi": None}
             
-            _LOGGER.info("Scanner type: %s", type(scanner))
+            if not hasattr(scanner, 'discovered_devices'):
+                _LOGGER.warning("No discovered_devices")
+                return {"rssi": None}
             
-            # Проверяем все возможные атрибуты
-            if hasattr(scanner, 'discovered_devices'):
-                devices = scanner.discovered_devices
-                _LOGGER.info("discovered_devices type: %s, length: %s", type(devices), len(devices) if devices else 0)
+            for item in scanner.discovered_devices:
+                # Выводим ВСЮ информацию об элементе
+                _LOGGER.info("ITEM: %s", item)
+                _LOGGER.info("ITEM type: %s", type(item))
+                _LOGGER.info("ITEM dir: %s", [a for a in dir(item) if not a.startswith('_')])
                 
-                for item in devices:
-                    _LOGGER.debug("Item type: %s", type(item))
-                    _LOGGER.debug("Item: %s", item)
+                # Пробуем получить адрес разными способами
+                address = None
+                if hasattr(item, 'address'):
+                    address = item.address
+                    _LOGGER.info("  has address: %s", address)
+                if hasattr(item, 'device') and hasattr(item.device, 'address'):
+                    address = item.device.address
+                    _LOGGER.info("  has device.address: %s", address)
+                if isinstance(item, tuple) and len(item) > 0:
+                    address = str(item[0])
+                    _LOGGER.info("  tuple[0]: %s", address)
+                
+                if address and address.lower() == self.mac:
+                    _LOGGER.info("✅ MATCH found for %s!", self.mac)
                     
-                    # Пробуем получить адрес
-                    address = None
-                    if hasattr(item, 'address'):
-                        address = item.address
-                    elif hasattr(item, 'device') and hasattr(item.device, 'address'):
-                        address = item.device.address
-                    elif isinstance(item, tuple) and len(item) > 0:
-                        address = str(item[0])
+                    # Пробуем получить RSSI
+                    if hasattr(item, 'rssi'):
+                        self.rssi = item.rssi
+                        _LOGGER.info("  item.rssi: %s", self.rssi)
+                    if hasattr(item, 'device') and hasattr(item.device, 'rssi'):
+                        self.rssi = item.device.rssi
+                        _LOGGER.info("  item.device.rssi: %s", self.rssi)
+                    if isinstance(item, tuple) and len(item) > 1:
+                        self.rssi = item[1]
+                        _LOGGER.info("  tuple[1]: %s", self.rssi)
                     
-                    if address and address.lower() == self.mac:
-                        _LOGGER.info("✅ Found matching device!")
-                        
-                        # Пробуем получить RSSI
-                        rssi = None
-                        if hasattr(item, 'rssi'):
-                            rssi = item.rssi
-                        elif hasattr(item, 'device') and hasattr(item.device, 'rssi'):
-                            rssi = item.device.rssi
-                        elif isinstance(item, tuple) and len(item) > 1:
-                            rssi = item[1]
-                        
-                        if rssi is not None:
-                            self.rssi = rssi
-                            self.is_available = True
-                            _LOGGER.info("✅ RSSI: %s dBm", self.rssi)
-                        else:
-                            _LOGGER.warning("Could not extract RSSI from item")
-                        break
-                else:
-                    _LOGGER.warning("Device not found")
+                    if self.rssi is not None:
+                        self.is_available = True
+                        _LOGGER.info("✅ RSSI extracted: %s dBm", self.rssi)
+                    else:
+                        _LOGGER.warning("RSSI not found in item")
+                    break
             else:
-                _LOGGER.warning("No discovered_devices attribute")
+                _LOGGER.debug("Device %s not found in scanner", self.mac)
             
             return {"rssi": self.rssi}
                 
         except Exception as e:
-            _LOGGER.error("❌ ERROR: %s", e)
+            _LOGGER.error("ERROR: %s", e)
             import traceback
             _LOGGER.error(traceback.format_exc())
-            self.is_available = False
             return {"rssi": None}
