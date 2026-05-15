@@ -1,44 +1,61 @@
 """Бинарный сенсор кнопки для iTAG."""
 
 import asyncio
+import logging
+
 from homeassistant.components.binary_sensor import BinarySensorEntity
-from homeassistant.helpers import device_registry as dr
+from homeassistant.core import HomeAssistant, callback
+from homeassistant.helpers.entity_platform import AddEntitiesCallback
 
 from .const import DOMAIN
+from .coordinator import iTAGDataUpdateCoordinator
+
+_LOGGER = logging.getLogger(__name__)
 
 
-async def async_setup_entry(hass, entry, async_add_entities):
-    """Настройка сенсора кнопки."""
-    tracker = hass.data[DOMAIN][entry.entry_id]["tracker"]
-    sensor = iTAGButtonSensor(tracker, entry)
-    tracker.set_button_callback(sensor.trigger_button_press)
-    async_add_entities([sensor], True)
+async def async_setup_entry(
+    hass: HomeAssistant,
+    entry: ConfigEntry,
+    async_add_entities: AddEntitiesCallback,
+) -> None:
+    """Set up button sensor."""
+    coordinator: iTAGDataUpdateCoordinator = entry.runtime_data
+    sensor = iTAGButtonSensor(coordinator)
+    coordinator.set_button_callback(sensor.trigger_button_press)
+    async_add_entities([sensor])
 
 
 class iTAGButtonSensor(BinarySensorEntity):
-    """Сенсор кнопки."""
+    """Button sensor for iTAG."""
 
-    def __init__(self, tracker, entry):
-        self._tracker = tracker
-        self._entry = entry
-        self._attr_name = f"{entry.data['name']} Button"
-        self._attr_unique_id = f"{entry.data['mac_address'].replace(':', '')}_button"
-        self._attr_device_class = "button"
+    _attr_should_poll = False
+    _attr_device_class = "button"
+
+    def __init__(self, coordinator: iTAGDataUpdateCoordinator) -> None:
+        """Initialize the sensor."""
+        self.coordinator = coordinator
+        self._attr_unique_id = f"{coordinator.mac_normalized}_button"
+        self._attr_name = f"{coordinator.name} Button"
         self._attr_is_on = False
 
-        mac_normalized = entry.data["mac_address"].replace(":", "")
-        self._attr_device_info = {
-            "identifiers": {(DOMAIN, mac_normalized)},
-            "name": entry.data["name"],
-            "manufacturer": "iTAG",
-            "model": "BLE Tracker",
-            "connections": {(dr.CONNECTION_BLUETOOTH, entry.data["mac_address"])},
-        }
+    @property
+    def device_info(self):
+        """Return device info (только identifiers!)."""
+        return self.coordinator.device_info
 
-    async def trigger_button_press(self):
-        """Вызывается при нажатии кнопки."""
+    async def trigger_button_press(self) -> None:
+        """Called when button is pressed."""
         self._attr_is_on = True
         self.async_write_ha_state()
         await asyncio.sleep(1)
         self._attr_is_on = False
+        self.async_write_ha_state()
+
+    async def async_added_to_hass(self) -> None:
+        """When entity is added to hass."""
+        await super().async_added_to_hass()
+
+    @callback
+    def _handle_coordinator_update(self) -> None:
+        """Handle updated data from the coordinator."""
         self.async_write_ha_state()
