@@ -51,21 +51,30 @@ class ITAGDevice:
     async def update(self) -> dict:
         """Update device data."""
         try:
-            # Get RSSI from Bluetooth stack
+            # Get RSSI from Bluetooth stack - правильный способ в HA 2024+
             ble_device = bluetooth.async_ble_device_from_address(
                 self.hass, self.mac, connectable=True
             )
             
-            if ble_device and ble_device.rssi is not None:
-                self._rssi = ble_device.rssi
-                _LOGGER.debug("RSSI for %s: %s", self.mac, self._rssi)
+            if ble_device:
+                # Получаем RSSI через async_last_service_info
+                service_info = bluetooth.async_last_service_info(
+                    self.hass, self.mac, connectable=True
+                )
+                if service_info and service_info.rssi is not None:
+                    self._rssi = service_info.rssi
+                    _LOGGER.debug("RSSI for %s: %s", self.mac, self._rssi)
+                else:
+                    _LOGGER.debug("No RSSI data for %s", self.mac)
+                    self._available = False
+                    return self._get_data_dict()
             else:
                 _LOGGER.debug("No BLE device found for %s", self.mac)
                 self._available = False
                 return self._get_data_dict()
 
             # Check if RSSI is strong enough to connect
-            if self._rssi > RSSI_CONNECT_THRESHOLD:
+            if self._rssi is not None and self._rssi > RSSI_CONNECT_THRESHOLD:
                 await self._connect_and_read()
                 self._available = True
             else:
