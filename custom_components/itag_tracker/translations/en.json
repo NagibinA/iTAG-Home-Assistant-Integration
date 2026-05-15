@@ -1,0 +1,25 @@
+{
+  "config": {
+    "step": {
+      "user": {
+        "title": "Add iTAG device",
+        "description": "Select your iTAG device from the list or enter MAC address manually",
+        "data": {
+          "address": "Device address",
+          "name": "Device name"
+        }
+      },
+      "manual": {
+        "title": "Manual MAC address",
+        "description": "Enter the MAC address of your iTAG device",
+        "data": {
+          "address": "MAC address (e.g., AA:BB:CC:DD:EE:FF)",
+          "name": "Device name"
+        }
+      }
+    },
+    "abort": {
+      "already_configured": "Device is already configured"
+    }
+  }
+}
