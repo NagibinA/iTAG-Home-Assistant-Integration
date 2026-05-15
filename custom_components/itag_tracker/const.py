@@ -1,8 +1,9 @@
 """Constants for the iTAG integration."""
 DOMAIN = "itag_tracker"
 DEFAULT_NAME = "iTAG"
-RSSI_PRESENCE_THRESHOLD = -80
-RSSI_CONNECT_THRESHOLD = -60
+RSSI_PRESENCE_THRESHOLD = -85   # Дома при RSSI >= -85
+RSSI_ABSENT_THRESHOLD = -95     # Не дома при RSSI < -95
+RSSI_CONNECT_THRESHOLD = -90    # Подключаться при RSSI > -90 (почти всегда)
 CONNECT_TIMEOUT = 10.0
 
 # Service UUIDs
