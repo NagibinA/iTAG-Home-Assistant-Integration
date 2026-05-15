@@ -1,10 +1,10 @@
-"""Координатор для iTAG — только RSSI."""
+"""Координатор для iTAG — через HA Bluetooth API."""
 
 import logging
 from datetime import timedelta
 
 from homeassistant.helpers.update_coordinator import DataUpdateCoordinator
-from bleak import BleakScanner
+from homeassistant.components.bluetooth import async_get_scanner
 
 from .const import DOMAIN, SCAN_INTERVAL
 
@@ -12,8 +12,6 @@ _LOGGER = logging.getLogger(__name__)
 
 
 class iTAGDataUpdateCoordinator(DataUpdateCoordinator):
-    """Координатор для получения RSSI."""
-
     def __init__(self, hass, entry):
         super().__init__(
             hass,
@@ -28,24 +26,36 @@ class iTAGDataUpdateCoordinator(DataUpdateCoordinator):
         self.is_available = False
 
     async def _async_update_data(self):
-        """Поиск устройства и получение RSSI."""
-        _LOGGER.info("Scanning for %s (%s)...", self.name, self.mac)
+        _LOGGER.info("=== iTAG DEBUG: Using HA Bluetooth Scanner ===")
         
         try:
-            device = await BleakScanner.find_device_by_address(self.mac, timeout=5)
+            scanner = async_get_scanner(self.hass)
             
-            if device:
-                self.rssi = device.rssi
-                self.is_available = True
-                _LOGGER.info("%s found! RSSI: %s dBm", self.name, device.rssi)
-                return {"rssi": self.rssi}
-            else:
+            if not scanner:
+                _LOGGER.error("Bluetooth scanner not available!")
+                return {"rssi": None}
+            
+            _LOGGER.info("Scanner found, looking for %s...", self.mac)
+            
+            # Ищем в discovered_devices_and_advertisement_data
+            found = False
+            for address, adv_data in scanner.discovered_devices_and_advertisement_data.items():
+                _LOGGER.debug("HA Scanner sees: %s (RSSI: %s)", address, adv_data.rssi)
+                if address.lower() == self.mac:
+                    self.rssi = adv_data.rssi
+                    self.is_available = True
+                    found = True
+                    _LOGGER.info("✅ FOUND %s via HA Scanner! RSSI: %s dBm", self.name, self.rssi)
+                    break
+            
+            if not found:
+                _LOGGER.warning("❌ %s not found in HA Scanner", self.name)
                 self.rssi = None
                 self.is_available = False
-                _LOGGER.debug("%s not found", self.name)
-                return {"rssi": None}
+            
+            return {"rssi": self.rssi}
                 
         except Exception as e:
-            _LOGGER.error("Error scanning for %s: %s", self.name, e)
+            _LOGGER.error("❌ ERROR: %s", e)
             self.is_available = False
             return {"rssi": None}
