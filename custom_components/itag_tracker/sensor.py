@@ -1,13 +1,10 @@
 """Сенсор батареи для iTAG."""
 
-import logging
-
 from homeassistant.components.sensor import SensorEntity
 from homeassistant.const import PERCENTAGE
+from homeassistant.helpers import device_registry as dr
 
 from .const import DOMAIN
-
-_LOGGER = logging.getLogger(__name__)
 
 
 async def async_setup_entry(hass, entry, async_add_entities):
@@ -26,6 +23,15 @@ class iTAGBatterySensor(SensorEntity):
         self._attr_unique_id = f"{entry.data['mac_address'].replace(':', '')}_battery"
         self._attr_native_unit_of_measurement = PERCENTAGE
         self._attr_device_class = "battery"
+
+        mac_normalized = entry.data["mac_address"].replace(":", "")
+        self._attr_device_info = {
+            "identifiers": {(DOMAIN, mac_normalized)},
+            "name": entry.data["name"],
+            "manufacturer": "iTAG",
+            "model": "BLE Tracker",
+            "connections": {(dr.CONNECTION_BLUETOOTH, entry.data["mac_address"])},
+        }
 
     @property
     def native_value(self):
