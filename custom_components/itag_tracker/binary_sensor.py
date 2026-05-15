@@ -1,13 +1,10 @@
 """Бинарный сенсор кнопки для iTAG."""
 
 import asyncio
-import logging
-
 from homeassistant.components.binary_sensor import BinarySensorEntity
+from homeassistant.helpers import device_registry as dr
 
 from .const import DOMAIN
-
-_LOGGER = logging.getLogger(__name__)
 
 
 async def async_setup_entry(hass, entry, async_add_entities):
@@ -28,6 +25,15 @@ class iTAGButtonSensor(BinarySensorEntity):
         self._attr_unique_id = f"{entry.data['mac_address'].replace(':', '')}_button"
         self._attr_device_class = "button"
         self._attr_is_on = False
+
+        mac_normalized = entry.data["mac_address"].replace(":", "")
+        self._attr_device_info = {
+            "identifiers": {(DOMAIN, mac_normalized)},
+            "name": entry.data["name"],
+            "manufacturer": "iTAG",
+            "model": "BLE Tracker",
+            "connections": {(dr.CONNECTION_BLUETOOTH, entry.data["mac_address"])},
+        }
 
     async def trigger_button_press(self):
         """Вызывается при нажатии кнопки."""
