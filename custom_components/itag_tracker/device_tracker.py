@@ -4,8 +4,7 @@ import logging
 import asyncio
 from datetime import datetime
 
-from homeassistant.components.device_tracker import SourceType
-from homeassistant.components.device_tracker.config_entry import ScannerEntity
+from homeassistant.components.device_tracker import SourceType, ScannerEntity
 from bleak import BleakScanner, BleakClient
 
 from .const import (
@@ -180,10 +179,3 @@ class iTAGDeviceTracker(ScannerEntity):
             # Уведомляем binary_sensor через callback
             if self._button_callback:
                 self.hass.async_create_task(self._button_callback())
-
-
-async def async_setup_entry(hass, entry, async_add_entities):
-    """Настройка device tracker (вызывается из __init__)."""
-    # Трекер уже создан в __init__, просто добавляем его
-    tracker = hass.data[DOMAIN][entry.entry_id]["tracker"]
-    async_add_entities([tracker], True)
