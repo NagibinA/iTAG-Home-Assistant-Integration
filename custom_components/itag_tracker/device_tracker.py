@@ -28,7 +28,7 @@ class iTAGDeviceTracker(ScannerEntity):
         self._mac = entry.data["mac_address"].lower()
         self._name = entry.data["name"]
         self._attr_name = self._name
-        self._attr_unique_id = f"{self._mac}_tracker"
+        self._attr_unique_id = f"{self._mac}_tracker"  # ← УНИКАЛЬНЫЙ ID
 
         self._is_present = False
         self._rssi = None
@@ -40,6 +40,11 @@ class iTAGDeviceTracker(ScannerEntity):
         self._running = False
         self._last_rssi_update = None
         self._button_callback = None
+
+    @property
+    def unique_id(self):
+        """Возвращает уникальный идентификатор."""
+        return self._attr_unique_id
 
     @property
     def device_info(self):
