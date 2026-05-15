@@ -1,72 +1,85 @@
-"""Device tracker для iTAG."""
+"""Device tracker for iTAG."""
+from __future__ import annotations
 
-from homeassistant.components.device_tracker import SourceType
-from homeassistant.components.device_tracker.config_entry import BaseTrackerEntity
-from homeassistant.const import STATE_HOME, STATE_NOT_HOME
-from homeassistant.helpers import device_registry as dr
+from homeassistant.components.device_tracker import SourceType, TrackerEntity
+from homeassistant.config_entries import ConfigEntry
+from homeassistant.core import HomeAssistant, callback
+from homeassistant.helpers.entity_platform import AddEntitiesCallback
+from homeassistant.helpers.update_coordinator import CoordinatorEntity
 
-from .const import DOMAIN
-
-
-async def async_setup_entry(hass, entry, async_add_entities):
-    """Настройка device tracker."""
-    coordinator = hass.data[DOMAIN][entry.entry_id]
-    async_add_entities([iTAGDeviceTracker(coordinator, entry)], True)
+from . import ITAGDataUpdateCoordinator
+from .const import DOMAIN, RSSI_PRESENCE_THRESHOLD
 
 
-class iTAGDeviceTracker(BaseTrackerEntity):
-    """Трекер присутствия iTAG."""
+async def async_setup_entry(
+    hass: HomeAssistant, entry: ConfigEntry, async_add_entities: AddEntitiesCallback
+) -> None:
+    """Set up iTAG device tracker based on a config entry."""
+    data = hass.data[DOMAIN][entry.entry_id]
+    coordinator = data["coordinator"]
+    
+    async_add_entities([ITAGDeviceTracker(coordinator)])
 
-    _attr_should_poll = False
-    _attr_has_entity_name = True
-    _attr_name = None
 
-    def __init__(self, coordinator, entry):
+class ITAGDeviceTracker(CoordinatorEntity, TrackerEntity):
+    """Representation of iTAG device tracker."""
+
+    def __init__(self, coordinator: ITAGDataUpdateCoordinator) -> None:
+        """Initialize the tracker."""
+        super().__init__(coordinator)
         self.coordinator = coordinator
-        self.entry = entry
-        self._attr_unique_id = f"{coordinator.mac_normalized}_tracker"
+        self._attr_unique_id = f"{coordinator.device.mac}_tracker"
+        self._attr_name = f"{coordinator.device.name} Presence"
+        self._attr_device_info = coordinator.device_info
 
     @property
-    def device_info(self):
-        """Привязка к устройству."""
-        return {
-            "identifiers": {(DOMAIN, self.coordinator.mac_normalized)},
-        }
-
-    @property
-    def state(self):
-        """Состояние присутствия."""
-        return STATE_HOME if self.coordinator.is_present else STATE_NOT_HOME
-
-    @property
-    def source_type(self):
-        """Тип источника."""
+    def source_type(self) -> SourceType:
+        """Return the source type."""
         return SourceType.BLUETOOTH
 
     @property
-    def extra_state_attributes(self):
-        """Дополнительные атрибуты."""
-        attrs = {}
-        if self.coordinator.rssi is not None:
-            attrs["rssi"] = self.coordinator.rssi
-        if self.coordinator.battery is not None:
-            attrs["battery"] = self.coordinator.battery
-        if self.coordinator.last_seen is not None:
-            attrs["last_seen"] = self.coordinator.last_seen
-        return attrs
+    def icon(self) -> str:
+        """Return icon based on connection state."""
+        if self.is_connected:
+            return "mdi:bluetooth"
+        return "mdi:bluetooth-off"
 
     @property
-    def available(self):
-        """Доступность сущности."""
-        return self.coordinator.rssi is not None
+    def latitude(self) -> float | None:
+        """Return latitude (not used for BLE)."""
+        return None
 
-    async def async_added_to_hass(self):
-        """При добавлении в Home Assistant."""
-        await super().async_added_to_hass()
-        self.async_on_remove(
-            self.coordinator.async_add_listener(self._handle_update)
-        )
+    @property
+    def longitude(self) -> float | None:
+        """Return longitude (not used for BLE)."""
+        return None
 
-    def _handle_update(self):
-        """Обновление состояния."""
+    @property
+    def location_name(self) -> str | None:
+        """Return location name."""
+        return None
+
+    @property
+    def should_poll(self) -> bool:
+        """No polling needed."""
+        return False
+
+    @property
+    def available(self) -> bool:
+        """Return True if device is available."""
+        return self.coordinator.data.get("available", False) if self.coordinator.data else False
+
+    @property
+    def is_connected(self) -> bool:
+        """Return true if device is connected (RSSI above threshold)."""
+        if not self.coordinator.data:
+            return False
+        rssi = self.coordinator.data.get("rssi")
+        if rssi is None:
+            return False
+        return rssi > RSSI_PRESENCE_THRESHOLD
+
+    @callback
+    def _handle_coordinator_update(self) -> None:
+        """Handle updated data from the coordinator."""
         self.async_write_ha_state()
