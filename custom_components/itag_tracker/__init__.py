@@ -15,7 +15,7 @@ from .device import ITAGDevice
 
 _LOGGER = logging.getLogger(__name__)
 
-SCAN_INTERVAL = timedelta(seconds=10)  # Изменено с 30 на 10 секунд
+SCAN_INTERVAL = timedelta(seconds=30)  # Изменено с 30 на 10 секунд
 
 
 async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
