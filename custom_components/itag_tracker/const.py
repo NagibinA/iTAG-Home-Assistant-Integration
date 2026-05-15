@@ -10,18 +10,15 @@ CHARGE_LVL = "00002a19-0000-1000-8000-00805f9b34fb"
 BUTTON_CHAR = "0000ffe1-0000-1000-8000-00805f9b34fb"
 
 # Альтернативные UUID для некоторых моделей iTAG
-ALT_SERVICE_BUTTON = "0000fff0-0000-1000-8000-00805f9b34fb"
 ALT_BUTTON_CHAR = "0000fff2-0000-1000-8000-00805f9b34fb"
-
-# Константы для расчёта расстояния по RSSI
-DEFAULT_TX_POWER = -59
-ENVIRONMENT_FACTOR = 2.5
 
 # Пороги для присутствия
 RSSI_PRESENCE_THRESHOLD = -80
 RSSI_STRONG_SIGNAL = -60
 CONNECTION_TIMEOUT = 30
 
-# Время сканирования
+# Время сканирования (секунды)
 SCAN_INTERVAL = 10
-ADVERTISING_TIMEOUT = 5
+
+# Платформы
+PLATFORMS = ["sensor", "binary_sensor", "device_tracker"]
