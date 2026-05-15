@@ -9,13 +9,9 @@ from homeassistant.helpers.entity_platform import AddEntitiesCallback
 from homeassistant.helpers.update_coordinator import CoordinatorEntity
 
 from . import ITAGDataUpdateCoordinator
-from .const import DOMAIN
+from .const import DOMAIN, RSSI_PRESENCE_THRESHOLD, RSSI_ABSENT_THRESHOLD
 
 _LOGGER = logging.getLogger(__name__)
-
-# Пороги присутствия
-PRESENT_THRESHOLD = -85   # RSSI >= -85 → дома
-ABSENT_THRESHOLD = -95    # RSSI < -95 → не дома
 
 
 async def async_setup_entry(
@@ -38,7 +34,6 @@ class ITAGDeviceTracker(CoordinatorEntity, TrackerEntity):
         self._attr_unique_id = f"{coordinator.device.mac}_tracker"
         self._attr_name = f"{coordinator.device.name} Presence"
         self._attr_device_info = coordinator.device_info
-        self._prev_state = None
 
     @property
     def source_type(self) -> SourceType:
@@ -54,57 +49,55 @@ class ITAGDeviceTracker(CoordinatorEntity, TrackerEntity):
 
     @property
     def latitude(self) -> float | None:
-        """Return latitude (not used for BLE)."""
         return None
 
     @property
     def longitude(self) -> float | None:
-        """Return longitude (not used for BLE)."""
         return None
 
     @property
     def location_name(self) -> str | None:
-        """Return location name."""
         return None
 
     @property
     def should_poll(self) -> bool:
-        """No polling needed."""
         return False
 
     @property
     def available(self) -> bool:
-        """Return True if device is available."""
-        return self.coordinator.data.get("available", False) if self.coordinator.data else False
+        """Всегда True, чтобы не было unavailable."""
+        return True
 
     @property
     def is_connected(self) -> bool:
         """Return true if device is considered home."""
         if not self.coordinator.data:
+            _LOGGER.debug("No coordinator data, assuming not home")
             return False
         
         rssi = self.coordinator.data.get("rssi")
+        _LOGGER.debug("Presence check - RSSI: %s", rssi)
+        
         if rssi is None:
+            _LOGGER.debug("No RSSI, assuming not home")
             return False
         
         # RSSI >= -85 → дома
-        if rssi >= PRESENT_THRESHOLD:
-            _LOGGER.debug("RSSI %s >= %s → home", rssi, PRESENT_THRESHOLD)
+        if rssi >= RSSI_PRESENCE_THRESHOLD:
+            _LOGGER.debug("RSSI %s >= %s → home", rssi, RSSI_PRESENCE_THRESHOLD)
             return True
         
         # RSSI < -95 → не дома
-        if rssi < ABSENT_THRESHOLD:
-            _LOGGER.debug("RSSI %s < %s → not home", rssi, ABSENT_THRESHOLD)
+        if rssi < RSSI_ABSENT_THRESHOLD:
+            _LOGGER.debug("RSSI %s < %s → not home", rssi, RSSI_ABSENT_THRESHOLD)
             return False
         
-        # -95 <= RSSI < -85 → пограничная зона, возвращаем предыдущее состояние
-        _LOGGER.debug("RSSI %s in border zone (%s to %s), keeping previous state: %s", 
-                      rssi, ABSENT_THRESHOLD, PRESENT_THRESHOLD, self._prev_state)
-        return self._prev_state if self._prev_state is not None else False
+        # -95 <= RSSI < -85 → пограничная зона, считаем что не дома
+        _LOGGER.debug("RSSI %s in border zone (%s to %s) → not home", 
+                      rssi, RSSI_ABSENT_THRESHOLD, RSSI_PRESENCE_THRESHOLD)
+        return False
 
     @callback
     def _handle_coordinator_update(self) -> None:
         """Handle updated data from the coordinator."""
-        # Сохраняем предыдущее состояние перед обновлением
-        self._prev_state = self.is_connected
         self.async_write_ha_state()
