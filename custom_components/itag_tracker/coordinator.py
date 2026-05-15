@@ -1,4 +1,4 @@
-"""Координатор для iTAG — показываем всё содержимое."""
+"""Координатор для iTAG — выводим все атрибуты."""
 
 import logging
 from datetime import timedelta
@@ -40,42 +40,37 @@ class iTAGDataUpdateCoordinator(DataUpdateCoordinator):
                 return {"rssi": None}
             
             for item in scanner.discovered_devices:
-                # Выводим ВСЮ информацию об элементе
-                _LOGGER.info("ITEM: %s", item)
-                _LOGGER.info("ITEM type: %s", type(item))
-                _LOGGER.info("ITEM dir: %s", [a for a in dir(item) if not a.startswith('_')])
-                
-                # Пробуем получить адрес разными способами
+                # Получаем адрес
                 address = None
                 if hasattr(item, 'address'):
                     address = item.address
-                    _LOGGER.info("  has address: %s", address)
-                if hasattr(item, 'device') and hasattr(item.device, 'address'):
+                elif hasattr(item, 'device') and hasattr(item.device, 'address'):
                     address = item.device.address
-                    _LOGGER.info("  has device.address: %s", address)
-                if isinstance(item, tuple) and len(item) > 0:
+                elif isinstance(item, tuple) and len(item) > 0:
                     address = str(item[0])
-                    _LOGGER.info("  tuple[0]: %s", address)
                 
                 if address and address.lower() == self.mac:
                     _LOGGER.info("✅ MATCH found for %s!", self.mac)
+                    _LOGGER.info("FULL ITEM: %s", item)
+                    _LOGGER.info("ITEM TYPE: %s", type(item))
                     
-                    # Пробуем получить RSSI
-                    if hasattr(item, 'rssi'):
-                        self.rssi = item.rssi
-                        _LOGGER.info("  item.rssi: %s", self.rssi)
-                    if hasattr(item, 'device') and hasattr(item.device, 'rssi'):
-                        self.rssi = item.device.rssi
-                        _LOGGER.info("  item.device.rssi: %s", self.rssi)
-                    if isinstance(item, tuple) and len(item) > 1:
-                        self.rssi = item[1]
-                        _LOGGER.info("  tuple[1]: %s", self.rssi)
+                    # Выводим ВСЕ атрибуты
+                    attrs = [a for a in dir(item) if not a.startswith('_')]
+                    _LOGGER.info("ALL ATTRIBUTES: %s", attrs)
                     
-                    if self.rssi is not None:
-                        self.is_available = True
-                        _LOGGER.info("✅ RSSI extracted: %s dBm", self.rssi)
-                    else:
-                        _LOGGER.warning("RSSI not found in item")
+                    # Для каждого атрибута выводим значение
+                    for attr in attrs:
+                        try:
+                            value = getattr(item, attr)
+                            _LOGGER.info("  .%s = %s (type: %s)", attr, value, type(value))
+                        except Exception as e:
+                            _LOGGER.info("  .%s = ERROR: %s", attr, e)
+                    
+                    # Если это tuple, выводим все элементы
+                    if isinstance(item, tuple):
+                        for i, val in enumerate(item):
+                            _LOGGER.info("  tuple[%s] = %s (type: %s)", i, val, type(val))
+                    
                     break
             else:
                 _LOGGER.debug("Device %s not found in scanner", self.mac)
