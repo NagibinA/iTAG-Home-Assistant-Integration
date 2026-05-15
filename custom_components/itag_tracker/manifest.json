@@ -3,11 +3,9 @@
     "name": "iTAG Tracker",
     "version": "1.0.0",
     "requirements": [],
-    "dependencies": ["bluetooth", "device_tracker"],
+    "dependencies": ["bluetooth"],
     "codeowners": ["@NagibinA"],
     "config_flow": true,
-    "iot_class": "local_push",
-    "integration_type": "device",
-    "documentation": "https://github.com/NagibinA/iTAG-Home-Assistant-Integration",
-    "issue_tracker": "https://github.com/NagibinA/iTAG-Home-Assistant-Integration/issues"
+    "iot_class": "local_polling",
+    "integration_type": "device"
 }
