@@ -1,11 +1,15 @@
-"""iTAG device handler with button notifications."""
+"""iTAG device handler using Home Assistant Bluetooth components."""
 from __future__ import annotations
 
 import asyncio
 import logging
-from bleak import BleakClient
 from homeassistant.components import bluetooth
 from homeassistant.core import HomeAssistant
+from homeassistant.components.bluetooth import (
+    async_ble_device_from_address,
+    async_last_service_info,
+    BluetoothServiceInfoBleak,
+)
 
 from .const import (
     BATTERY_SERVICE_UUID,
@@ -17,7 +21,7 @@ _LOGGER = logging.getLogger(__name__)
 
 
 class ITAGDevice:
-    """Representation of iTAG device."""
+    """Representation of iTAG device using HA Bluetooth."""
 
     def __init__(self, hass: HomeAssistant, mac: str, name: str) -> None:
         """Initialize the device."""
@@ -31,6 +35,7 @@ class ITAGDevice:
         self._client = None
         self._keep_connected = False
         self._connect_task = None
+        self._device = None
 
     @property
     def rssi(self) -> int | None:
@@ -51,7 +56,7 @@ class ITAGDevice:
     async def update(self) -> dict:
         """Update device data - called every 30 seconds."""
         # Получаем RSSI из рекламных данных
-        service_info = bluetooth.async_last_service_info(
+        service_info = async_last_service_info(
             self.hass, self.mac, connectable=True
         )
         
@@ -59,9 +64,12 @@ class ITAGDevice:
             self._rssi = service_info.rssi
             _LOGGER.info("RSSI: %s", self._rssi)
             self._available = True
+            self._device = async_ble_device_from_address(
+                self.hass, self.mac, connectable=True
+            )
             
             # Если нет соединения - запускаем постоянное подключение
-            if not self._keep_connected:
+            if not self._keep_connected and self._device:
                 _LOGGER.info("Starting persistent connection...")
                 self._keep_connected = True
                 if self._connect_task is None or self._connect_task.done():
@@ -73,10 +81,12 @@ class ITAGDevice:
 
     async def _persistent_connection(self) -> None:
         """Keep connection alive and listen for notifications."""
+        from bleak_retry_connector import establish_connection, BleakClientWithServiceCache
+        
         while self._keep_connected:
             try:
                 # Проверяем, живы ли рекламные данные
-                service_info = bluetooth.async_last_service_info(
+                service_info = async_last_service_info(
                     self.hass, self.mac, connectable=True
                 )
                 
@@ -85,18 +95,29 @@ class ITAGDevice:
                     await asyncio.sleep(5)
                     continue
                 
-                self._rssi = service_info.rssi
+                if not self._device:
+                    self._device = async_ble_device_from_address(
+                        self.hass, self.mac, connectable=True
+                    )
+                    if not self._device:
+                        await asyncio.sleep(5)
+                        continue
                 
                 if self._client and self._client.is_connected:
-                    # Уже подключены, просто читаем батарею раз в 30 секунд
-                    await asyncio.sleep(30)
+                    # Уже подключены, просто читаем батарею раз в 60 секунд
+                    await asyncio.sleep(60)
                     await self._read_battery()
                     continue
                 
-                # Подключаемся
+                # Подключаемся через bleak-retry-connector
                 _LOGGER.info("Connecting to %s...", self.mac)
-                self._client = BleakClient(self.mac, timeout=CONNECT_TIMEOUT)
-                await self._client.connect()
+                self._client = await establish_connection(
+                    BleakClientWithServiceCache,
+                    self._device,
+                    self.name,
+                    max_attempts=3,
+                    timeout=CONNECT_TIMEOUT,
+                )
                 
                 if not self._client.is_connected:
                     _LOGGER.warning("Failed to connect")
@@ -105,16 +126,13 @@ class ITAGDevice:
                 
                 _LOGGER.info("Connected!")
                 
-                # Получаем все сервисы
-                await self._client.get_services()
-                
                 # Включаем уведомления для кнопки
                 try:
                     await self._client.start_notify(BUTTON_SERVICE_UUID, self._button_callback)
                     _LOGGER.info("✅ Button notifications ENABLED! Press the button.")
                 except Exception as e:
                     _LOGGER.error("Failed to enable notifications: %s", e)
-                    # Пробуем альтернативный способ
+                    # Пробуем через характеристику
                     try:
                         char = self._client.services.get_characteristic(BUTTON_SERVICE_UUID)
                         if char:
@@ -129,7 +147,7 @@ class ITAGDevice:
                 # Держим соединение открытым
                 while self._keep_connected:
                     # Проверяем, живы ли рекламные данные
-                    service_info = bluetooth.async_last_service_info(
+                    service_info = async_last_service_info(
                         self.hass, self.mac, connectable=True
                     )
                     if not service_info or service_info.rssi is None:
