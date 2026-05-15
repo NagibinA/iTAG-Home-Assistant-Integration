@@ -168,7 +168,6 @@ class iTAGDeviceTracker(ScannerEntity):
                 self.hass.async_create_task(self._button_callback())
 
 
-# ✅ ОБЯЗАТЕЛЬНАЯ функция для device_tracker платформы
 async def async_setup_entry(hass, entry, async_add_entities):
     """Настройка device tracker платформы."""
     tracker = hass.data[DOMAIN][entry.entry_id]["tracker"]
