@@ -1,6 +1,7 @@
 """Constants for the iTAG integration."""
 DOMAIN = "itag_tracker"
 DEFAULT_NAME = "iTAG"
+RSSI_PRESENCE_THRESHOLD = -80
 RSSI_CONNECT_THRESHOLD = -60
 CONNECT_TIMEOUT = 10.0
 
