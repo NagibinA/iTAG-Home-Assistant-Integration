@@ -9,7 +9,7 @@ from homeassistant.helpers.entity_platform import AddEntitiesCallback
 from homeassistant.helpers.update_coordinator import CoordinatorEntity
 
 from . import ITAGDataUpdateCoordinator
-from .const import DOMAIN, RSSI_PRESENCE_THRESHOLD, RSSI_ABSENT_THRESHOLD
+from .const import DOMAIN
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -34,6 +34,7 @@ class ITAGDeviceTracker(CoordinatorEntity, TrackerEntity):
         self._attr_unique_id = f"{coordinator.device.mac}_tracker"
         self._attr_name = f"{coordinator.device.name} Presence"
         self._attr_device_info = coordinator.device_info
+        self._attr_should_poll = False
 
     @property
     def source_type(self) -> SourceType:
@@ -42,60 +43,39 @@ class ITAGDeviceTracker(CoordinatorEntity, TrackerEntity):
 
     @property
     def icon(self) -> str:
-        """Return icon based on connection state."""
-        if self.is_connected:
-            return "mdi:bluetooth"
-        return "mdi:bluetooth-off"
-
-    @property
-    def latitude(self) -> float | None:
-        return None
-
-    @property
-    def longitude(self) -> float | None:
-        return None
+        """Return icon."""
+        return "mdi:bluetooth"
 
     @property
     def location_name(self) -> str | None:
-        return None
-
-    @property
-    def should_poll(self) -> bool:
-        return False
-
-    @property
-    def available(self) -> bool:
-        """Всегда True, чтобы не было unavailable."""
-        return True
-
-    @property
-    def is_connected(self) -> bool:
-        """Return true if device is considered home."""
+        """Return location name."""
         if not self.coordinator.data:
-            _LOGGER.debug("No coordinator data, assuming not home")
-            return False
+            return None
         
         rssi = self.coordinator.data.get("rssi")
         _LOGGER.debug("Presence check - RSSI: %s", rssi)
         
         if rssi is None:
-            _LOGGER.debug("No RSSI, assuming not home")
-            return False
+            return "not_home"
         
         # RSSI >= -85 → дома
-        if rssi >= RSSI_PRESENCE_THRESHOLD:
-            _LOGGER.debug("RSSI %s >= %s → home", rssi, RSSI_PRESENCE_THRESHOLD)
-            return True
+        if rssi >= -85:
+            _LOGGER.debug("RSSI %s >= -85 → home", rssi)
+            return "home"
         
-        # RSSI < -95 → не дома
-        if rssi < RSSI_ABSENT_THRESHOLD:
-            _LOGGER.debug("RSSI %s < %s → not home", rssi, RSSI_ABSENT_THRESHOLD)
-            return False
-        
-        # -95 <= RSSI < -85 → пограничная зона, считаем что не дома
-        _LOGGER.debug("RSSI %s in border zone (%s to %s) → not home", 
-                      rssi, RSSI_ABSENT_THRESHOLD, RSSI_PRESENCE_THRESHOLD)
+        # RSSI < -85 → не дома
+        _LOGGER.debug("RSSI %s < -85 → not_home", rssi)
+        return "not_home"
+
+    @property
+    def should_poll(self) -> bool:
+        """No polling needed."""
         return False
+
+    @property
+    def available(self) -> bool:
+        """Always available."""
+        return True
 
     @callback
     def _handle_coordinator_update(self) -> None:
