@@ -179,3 +179,4 @@ class iTAGDeviceTracker(ScannerEntity):
             # Уведомляем binary_sensor через callback
             if self._button_callback:
                 self.hass.async_create_task(self._button_callback())
+
