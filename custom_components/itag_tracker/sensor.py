@@ -1,100 +1,133 @@
-"""Сенсоры для iTAG."""
+"""Sensors for iTAG."""
+from __future__ import annotations
 
-from homeassistant.components.sensor import SensorEntity
-from homeassistant.const import SIGNAL_STRENGTH_DECIBELS_MILLIWATT, PERCENTAGE
-from homeassistant.helpers import device_registry as dr
+from homeassistant.components.sensor import SensorDeviceClass, SensorEntity
+from homeassistant.config_entries import ConfigEntry
+from homeassistant.const import PERCENTAGE, SIGNAL_STRENGTH_DECIBELS
+from homeassistant.core import HomeAssistant, callback
+from homeassistant.helpers.entity_platform import AddEntitiesCallback
+from homeassistant.helpers.update_coordinator import CoordinatorEntity
 
+from . import ITAGDataUpdateCoordinator
 from .const import DOMAIN
+from .icons import get_icon
 
 
-async def async_setup_entry(hass, entry, async_add_entities):
-    """Настройка сенсоров."""
-    coordinator = hass.data[DOMAIN][entry.entry_id]
-    async_add_entities([
-        iTAGRSSISensor(coordinator, entry),
-        iTAGBatterySensor(coordinator, entry),
-    ], True)
+async def async_setup_entry(
+    hass: HomeAssistant, entry: ConfigEntry, async_add_entities: AddEntitiesCallback
+) -> None:
+    """Set up iTAG sensors based on a config entry."""
+    data = hass.data[DOMAIN][entry.entry_id]
+    coordinator = data["coordinator"]
+    
+    entities = [
+        ITAGRSSISensor(coordinator),
+        ITAGBatterySensor(coordinator),
+        ITAGButtonSensor(coordinator),
+    ]
+    
+    async_add_entities(entities)
 
 
-class iTAGRSSISensor(SensorEntity):
-    """Сенсор RSSI."""
+class ITAGRSSISensor(CoordinatorEntity, SensorEntity):
+    """Representation of iTAG RSSI sensor."""
 
-    _attr_should_poll = False
-    _attr_device_class = "signal_strength"
-    _attr_native_unit_of_measurement = SIGNAL_STRENGTH_DECIBELS_MILLIWATT
-
-    def __init__(self, coordinator, entry):
+    def __init__(self, coordinator: ITAGDataUpdateCoordinator) -> None:
+        """Initialize the RSSI sensor."""
+        super().__init__(coordinator)
         self.coordinator = coordinator
-        self.entry = entry
-        self._attr_name = f"{entry.data['name']} RSSI"
-        self._attr_unique_id = f"{coordinator.mac_normalized}_rssi"
+        self._attr_unique_id = f"{coordinator.device.mac}_rssi"
+        self._attr_name = f"{coordinator.device.name} RSSI"
+        self._attr_device_class = SensorDeviceClass.SIGNAL_STRENGTH
+        self._attr_native_unit_of_measurement = SIGNAL_STRENGTH_DECIBELS
+        self._attr_device_info = coordinator.device_info
 
     @property
-    def device_info(self):
-        """Привязка к устройству."""
-        return {
-            "identifiers": {(DOMAIN, self.coordinator.mac_normalized)},
-        }
+    def native_value(self) -> int | None:
+        """Return the RSSI value."""
+        if not self.coordinator.data:
+            return None
+        return self.coordinator.data.get("rssi")
+    
+    @property
+    def icon(self) -> str:
+        """Return icon for RSSI."""
+        return get_icon("rssi_sensor", self.native_value)
 
     @property
-    def native_value(self):
-        """Значение RSSI."""
-        return self.coordinator.rssi
+    def available(self) -> bool:
+        """Return True if entity is available."""
+        return self.coordinator.last_update_success
 
-    @property
-    def available(self):
-        """Доступность."""
-        return self.coordinator.rssi is not None
-
-    async def async_added_to_hass(self):
-        """При добавлении в Home Assistant."""
-        await super().async_added_to_hass()
-        self.async_on_remove(
-            self.coordinator.async_add_listener(self._handle_update)
-        )
-
-    def _handle_update(self):
-        """Обновление состояния."""
+    @callback
+    def _handle_coordinator_update(self) -> None:
+        """Handle updated data from the coordinator."""
         self.async_write_ha_state()
 
 
-class iTAGBatterySensor(SensorEntity):
-    """Сенсор батареи."""
+class ITAGBatterySensor(CoordinatorEntity, SensorEntity):
+    """Representation of iTAG battery sensor."""
 
-    _attr_should_poll = False
-    _attr_device_class = "battery"
-    _attr_native_unit_of_measurement = PERCENTAGE
-
-    def __init__(self, coordinator, entry):
-        self.coordinator = coordinator
-        self.entry = entry
-        self._attr_name = f"{entry.data['name']} Battery"
-        self._attr_unique_id = f"{coordinator.mac_normalized}_battery"
-
-    @property
-    def device_info(self):
-        """Привязка к устройству."""
-        return {
-            "identifiers": {(DOMAIN, self.coordinator.mac_normalized)},
-        }
+    def __init__(self, coordinator: ITAGDataUpdateCoordinator) -> None:
+        """Initialize the battery sensor."""
+        super().__init__(coordinator)
+        self._attr_unique_id = f"{coordinator.device.mac}_battery"
+        self._attr_name = f"{coordinator.device.name} Battery"
+        self._attr_device_class = SensorDeviceClass.BATTERY
+        self._attr_native_unit_of_measurement = PERCENTAGE
+        self._attr_device_info = coordinator.device_info
 
     @property
-    def native_value(self):
-        """Уровень батареи."""
-        return self.coordinator.battery
+    def native_value(self) -> int | None:
+        """Return the battery level."""
+        if not self.coordinator.data:
+            return None
+        return self.coordinator.data.get("battery")
+    
+    @property
+    def icon(self) -> str:
+        """Return icon for battery level."""
+        return get_icon("battery_sensor", self.native_value)
 
     @property
-    def available(self):
-        """Доступность."""
-        return self.coordinator.battery is not None
+    def available(self) -> bool:
+        """Return True if entity is available."""
+        return self.coordinator.last_update_success and self.coordinator.data and self.coordinator.data.get("battery") is not None
 
-    async def async_added_to_hass(self):
-        """При добавлении в Home Assistant."""
-        await super().async_added_to_hass()
-        self.async_on_remove(
-            self.coordinator.async_add_listener(self._handle_update)
-        )
+    @callback
+    def _handle_coordinator_update(self) -> None:
+        """Handle updated data from the coordinator."""
+        self.async_write_ha_state()
 
-    def _handle_update(self):
-        """Обновление состояния."""
+
+class ITAGButtonSensor(CoordinatorEntity, SensorEntity):
+    """Representation of iTAG button sensor."""
+
+    def __init__(self, coordinator: ITAGDataUpdateCoordinator) -> None:
+        """Initialize the button sensor."""
+        super().__init__(coordinator)
+        self._attr_unique_id = f"{coordinator.device.mac}_button"
+        self._attr_name = f"{coordinator.device.name} Button"
+        self._attr_device_info = coordinator.device_info
+
+    @property
+    def native_value(self) -> str:
+        """Return the button state."""
+        if not self.coordinator.data:
+            return "unknown"
+        return "pressed" if self.coordinator.data.get("button_pressed") else "normal"
+    
+    @property
+    def icon(self) -> str:
+        """Return icon for button."""
+        return get_icon("button_sensor")
+
+    @property
+    def available(self) -> bool:
+        """Return True if entity is available."""
+        return self.coordinator.last_update_success
+
+    @callback
+    def _handle_coordinator_update(self) -> None:
+        """Handle updated data from the coordinator."""
         self.async_write_ha_state()
