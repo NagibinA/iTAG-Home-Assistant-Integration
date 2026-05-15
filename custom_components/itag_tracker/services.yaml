@@ -1,0 +1,23 @@
+press_button:
+  name: Нажать кнопку
+  description: Симулирует нажатие кнопки на iTAG
+  fields:
+    device_id:
+      name: Устройство
+      description: ID устройства iTAG
+      required: true
+      selector:
+        device:
+          integration: itag_tracker
+
+read_battery:
+  name: Прочитать батарею
+  description: Принудительно читает уровень заряда батареи
+  fields:
+    device_id:
+      name: Устройство
+      description: ID устройства iTAG
+      required: true
+      selector:
+        device:
+          integration: itag_tracker
