@@ -1,4 +1,4 @@
-"""Координатор для iTAG — через HA Bluetooth API."""
+"""Координатор для iTAG — через HA Bluetooth API (исправлен)."""
 
 import logging
 from datetime import timedelta
@@ -37,16 +37,19 @@ class iTAGDataUpdateCoordinator(DataUpdateCoordinator):
             
             _LOGGER.info("Scanner found, looking for %s...", self.mac)
             
-            # Ищем в discovered_devices_and_advertisement_data
+            # Правильный способ: перебираем discovered_devices
             found = False
-            for address, adv_data in scanner.discovered_devices_and_advertisement_data.items():
-                _LOGGER.debug("HA Scanner sees: %s (RSSI: %s)", address, adv_data.rssi)
-                if address.lower() == self.mac:
-                    self.rssi = adv_data.rssi
-                    self.is_available = True
-                    found = True
-                    _LOGGER.info("✅ FOUND %s via HA Scanner! RSSI: %s dBm", self.name, self.rssi)
-                    break
+            for device in scanner.discovered_devices:
+                _LOGGER.debug("HA Scanner sees: %s", device.address)
+                if device.address.lower() == self.mac:
+                    # Получаем advertisement_data для этого устройства
+                    adv_data = scanner.discovered_devices_and_advertisement_data.get(device.address)
+                    if adv_data:
+                        self.rssi = adv_data.rssi
+                        self.is_available = True
+                        found = True
+                        _LOGGER.info("✅ FOUND %s via HA Scanner! RSSI: %s dBm", self.name, self.rssi)
+                        break
             
             if not found:
                 _LOGGER.warning("❌ %s not found in HA Scanner", self.name)
