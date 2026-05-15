@@ -1,0 +1,51 @@
+{
+    "config": {
+        "step": {
+            "user": {
+                "title": "Добавить iTAG устройство",
+                "description": "Настройте ваш Bluetooth трекер iTAG",
+                "data": {
+                    "name": "Имя устройства",
+                    "mac_address": "MAC-адрес"
+                },
+                "data_description": {
+                    "mac_address": "Пример: AA:BB:CC:DD:EE:FF"
+                }
+            }
+        },
+        "error": {
+            "invalid_mac": "Неверный формат MAC-адреса. Используйте AA:BB:CC:DD:EE:FF"
+        },
+        "abort": {
+            "already_configured": "Устройство с таким MAC-адресом уже добавлено"
+        }
+    },
+    "entity": {
+        "sensor": {
+            "itag_battery": {
+                "name": "Батарея"
+            },
+            "itag_distance": {
+                "name": "Расстояние"
+            }
+        },
+        "binary_sensor": {
+            "itag_button": {
+                "name": "Кнопка",
+                "state": {
+                    "on": "Нажата",
+                    "off": "Отпущена"
+                }
+            }
+        },
+        "device_tracker": {
+            "itag_tracker": {
+                "name": "Присутствие",
+                "state": {
+                    "home": "Дома",
+                    "not_home": "Не дома"
+                }
+            }
+        }
+    }
+}
