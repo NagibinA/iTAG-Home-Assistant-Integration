@@ -1,35 +1,39 @@
-# iTAG Tracker for Home Assistant
+# iTAG BLE Tracker для Home Assistant
 
-[![hacs_badge](https://img.shields.io/badge/HACS-Default-orange.svg)](https://github.com/hacs/integration)
-[![GitHub release](https://img.shields.io/github/v/release/NagibinA/iTAG-Home-Assistant-Integration)](https://github.com/NagibinA/iTAG-Home-Assistant-Integration/releases)
-[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
+[![GitHub Release][releases-shield]][releases]
+[![License][license-shield]](LICENSE)
+[![hacs_badge](https://img.shields.io/badge/HACS-Custom-41BDF5.svg)](https://github.com/hacs/integration)
 
-Беспроводная интеграция для отслеживания BLE-брелоков iTAG в Home Assistant.
+Интеграция для отслеживания присутствия BLE-устройств iTAG в Home Assistant.
 
 ## Возможности
 
-- 🔋 **Отслеживание заряда батареи** - показывает уровень заряда в процентах
-- 🔘 **Детекция нажатия кнопки** - используйте iTAG как пульт для автоматизаций
-- 📡 **Мониторинг RSSI** - уровень сигнала для оценки расстояния
-- 📍 **Трекинг присутствия** - автоматически определяет, когда брелок рядом
-
-## Поддерживаемые устройства
-
-- Любые BLE-брелоки iTAG (AliExpress, Amazon, местные магазины)
-- Клоны AirTag с поддержкой BLE
-- Устройства с сервисами: 180f (Battery), 1802 (Alert), ffe0 (Button)
+- 📍 **Отслеживание присутствия** - определение дома/не дома на основе RSSI
+- 📶 **Только рекламные пакеты** - без подключения к устройству
+- 🔋 **Экономия батареи** - iTAG не тратит энергию на подключения
+- 🎯 **Простая настройка** - добавление через UI
 
 ## Установка
 
-### Через HACS (Рекомендуется)
+### HACS (рекомендуется)
 
-1. Добавьте этот репозиторий в HACS как Custom Repository
-2. Установите "iTAG Tracker"
+1. Добавьте репозиторий как пользовательский в HACS:
+   - HACS → Интеграции → ⋮ → Пользовательские репозитории
+   - URL: `https://github.com/NagibinA/iTAG-Home-Assistant-Integration`
+   - Категория: Интеграция
+2. Нажмите "Установить"
 3. Перезапустите Home Assistant
 
 ### Ручная установка
 
-1. Скачайте последний релиз
-2. Распакуйте `custom_components/itag_tracker` в папку `custom_components` вашего Home Assistant
-3. Перезапустите Home Assistant
+1. Скопируйте папку `itag_tracker` в `custom_components/`
+2. Перезапустите Home Assistant
 
+## Настройка
+
+1. Перейдите в **Настройки → Устройства и сервисы**
+2. Нажмите **+ Добавить интеграцию**
+3. Найдите **iTAG BLE Tracker**
+4. Выберите устройство из списка или введите MAC-адрес вручную
+5. Укажите имя устройства
+6. Нажмите **Создать**
