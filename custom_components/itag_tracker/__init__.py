@@ -1,4 +1,4 @@
-"""iTAG BLE integration."""
+"""iTAG BLE integration - advertisement only."""
 from __future__ import annotations
 
 import logging
@@ -35,18 +35,14 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
         "device": device,
     }
 
-    await hass.config_entries.async_forward_entry_setups(entry, ["device_tracker", "sensor"])
+    await hass.config_entries.async_forward_entry_setups(entry, ["device_tracker"])
 
     return True
 
 
 async def async_unload_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     """Unload a config entry."""
-    data = hass.data[DOMAIN].get(entry.entry_id)
-    if data and data.get("device"):
-        await data["device"].stop()
-
-    if unload_ok := await hass.config_entries.async_unload_platforms(entry, ["device_tracker", "sensor"]):
+    if unload_ok := await hass.config_entries.async_unload_platforms(entry, ["device_tracker"]):
         hass.data[DOMAIN].pop(entry.entry_id)
 
     return unload_ok
