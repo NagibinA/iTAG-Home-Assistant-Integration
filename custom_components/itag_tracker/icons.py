@@ -8,7 +8,4 @@ def get_icon(icon_name: str, state=None) -> str:
     if icon_name == "rssi_sensor":
         return "mdi:signal"
     
-    if icon_name == "button_sensor":
-        return "mdi:gesture-tap-button"
-    
     return "mdi:bluetooth"
