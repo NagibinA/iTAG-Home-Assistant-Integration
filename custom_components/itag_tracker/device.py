@@ -1,4 +1,4 @@
-"""iTAG device handler - persistent connection with smart battery reading."""
+"""iTAG device handler - persistent connection with battery notifications."""
 from __future__ import annotations
 
 import asyncio
@@ -9,7 +9,7 @@ from homeassistant.components import bluetooth
 from homeassistant.core import HomeAssistant
 
 from .const import (
-    BATTERY_SERVICE_UUID,
+    BATTERY_CHAR_UUID,
     CONNECT_TIMEOUT,
     RSSI_OFFLINE_VALUE,
 )
@@ -31,7 +31,6 @@ class ITAGDevice:
         self._is_connected = False
         self._read_task = None
         self._device = None
-        self._battery_100_count = 0
 
     @property
     def rssi(self) -> int | None:
@@ -50,16 +49,16 @@ class ITAGDevice:
         service_info = bluetooth.async_last_service_info(
             self.hass, self.mac, connectable=True
         )
-        
+
         if service_info and service_info.rssi is not None:
             self._rssi = service_info.rssi
             self._available = True
             self._device = bluetooth.async_ble_device_from_address(
                 self.hass, self.mac, connectable=True
             )
-            
+
             if self._device and not self._is_connected and (self._read_task is None or self._read_task.done()):
-                _LOGGER.info("Starting persistent connection...")
+                _LOGGER.info("Starting persistent connection with battery notifications...")
                 self._read_task = asyncio.create_task(self._persistent_connection())
         else:
             self._rssi = RSSI_OFFLINE_VALUE
@@ -67,30 +66,64 @@ class ITAGDevice:
 
         return self._get_data_dict()
 
-    async def _read_battery_until_real(self) -> int | None:
-        """Read battery, discarding placeholder 100% values."""
+    def _battery_callback(self, sender: int, data: bytearray) -> None:
+        """Callback when battery notification is received."""
+        if data and len(data) > 0:
+            new_battery = data[0]
+            # iTAG may send placeholder 100% first, filter it
+            if new_battery == 100 and self._battery is not None and self._battery < 100:
+                _LOGGER.debug("Ignoring placeholder 100%% notification (real is %s%%)", self._battery)
+                return
+
+            if self._battery != new_battery:
+                self._battery = new_battery
+                _LOGGER.info("🔋 Battery notification: %s%%", self._battery)
+        else:
+            _LOGGER.debug("Empty battery notification received")
+
+    async def _enable_battery_notifications(self) -> bool:
+        """
+        Enable battery notifications.
+        Tries standard method first, then fallback without CCCD check.
+        """
         try:
-            for attempt in range(6):  # максимум 6 попыток (~6-8 секунд)
-                battery_data = await self._client.read_gatt_char(BATTERY_SERVICE_UUID)
-                if battery_data and len(battery_data) > 0:
-                    value = battery_data[0]
-                    if value < 100:
-                        if attempt > 0:
-                            _LOGGER.debug("Real battery value: %s%% (after %s attempts)", value, attempt + 1)
-                        return value
-                    else:
-                        _LOGGER.debug("Got placeholder 100%%, attempt %s/6, waiting...", attempt + 1)
-                await asyncio.sleep(1.5)  # Пауза между попытками
-            
-            _LOGGER.warning("Failed to get real battery value after 6 attempts")
-            return None
-            
+            # Try standard notify
+            await self._client.start_notify(BATTERY_CHAR_UUID, self._battery_callback)
+            _LOGGER.info("Battery notifications enabled successfully")
+            return True
         except Exception as e:
-            _LOGGER.debug("Battery read error: %s", e)
-            return None
+            _LOGGER.debug("Standard notify failed: %s", e)
+
+            # Try fallback - get characteristic and try to enable notifications directly
+            try:
+                char = self._client.services.get_characteristic(BATTERY_CHAR_UUID)
+                if not char:
+                    _LOGGER.debug("Battery characteristic not found")
+                    return False
+
+                # Try to start notify without CCCD check (some devices work this way)
+                await self._client.start_notify(char, self._battery_callback)
+                _LOGGER.info("Battery notifications enabled via direct characteristic")
+                return True
+
+            except Exception as e2:
+                _LOGGER.debug("Fallback notify also failed: %s", e2)
+                return False
+
+    async def _battery_poll_fallback(self) -> None:
+        """Fallback: read battery via polling if notifications don't work."""
+        try:
+            battery_data = await self._client.read_gatt_char(BATTERY_CHAR_UUID)
+            if battery_data and len(battery_data) > 0:
+                value = battery_data[0]
+                if self._battery != value:
+                    self._battery = value
+                    _LOGGER.info("Battery (poll fallback): %s%%", self._battery)
+        except Exception as e:
+            _LOGGER.debug("Battery poll error: %s", e)
 
     async def _persistent_connection(self) -> None:
-        """Maintain connection and poll battery."""
+        """Maintain connection with battery notifications."""
         try:
             _LOGGER.info("Connecting to %s...", self.mac)
             self._client = await establish_connection(
@@ -100,53 +133,48 @@ class ITAGDevice:
                 max_attempts=3,
                 timeout=CONNECT_TIMEOUT,
             )
-            
+
             if not self._client.is_connected:
                 _LOGGER.error("Failed to connect")
                 self._is_connected = False
                 return
-            
+
             self._is_connected = True
-            _LOGGER.info("Connected! Starting smart battery polling...")
-            
-            # Сразу читаем батарею после подключения
-            real_battery = await self._read_battery_until_real()
-            if real_battery is not None:
-                self._battery = real_battery
-                _LOGGER.info("Initial battery: %s%%", self._battery)
-            
-            # Цикл чтения батареи
+            _LOGGER.info("Connected! Enabling battery notifications...")
+
+            # Try to enable battery notifications
+            notifications_enabled = await self._enable_battery_notifications()
+
+            if notifications_enabled:
+                _LOGGER.info("Battery notifications active - values will update automatically")
+
+                # Wait a bit then do an initial poll to get current value
+                await asyncio.sleep(3)
+                await self._battery_poll_fallback()
+            else:
+                _LOGGER.warning("Battery notifications not available, falling back to polling every 60s")
+
+            # Keep connection alive loop
+            last_poll = 0
+
             while self._is_connected:
-                # Проверяем, живо ли устройство
+                # Check if device is still advertising
                 service_info = bluetooth.async_last_service_info(
                     self.hass, self.mac, connectable=True
                 )
                 if not service_info or service_info.rssi is None:
                     _LOGGER.info("Device disappeared, closing connection...")
                     break
-                
-                # Читаем батарею умным методом
-                real_battery = await self._read_battery_until_real()
-                
-                if real_battery is not None:
-                    # Защита от залипания
-                    if real_battery == 100:
-                        self._battery_100_count += 1
-                        if self._battery_100_count >= 4:
-                            _LOGGER.warning("Battery stuck at 100%%, forcing reconnection...")
-                            break
-                    else:
-                        self._battery_100_count = 0
-                    
-                    if self._battery != real_battery:
-                        self._battery = real_battery
-                        _LOGGER.info("Battery: %s%%", self._battery)
-                else:
-                    _LOGGER.debug("Failed to read battery")
-                
-                # Пауза между циклами (30 секунд)
-                await asyncio.sleep(30)
-                
+
+                # If notifications are not working, fall back to polling
+                if not notifications_enabled:
+                    now = asyncio.get_event_loop().time()
+                    if now - last_poll >= 60:
+                        last_poll = now
+                        await self._battery_poll_fallback()
+
+                await asyncio.sleep(10)
+
         except asyncio.CancelledError:
             _LOGGER.debug("Connection task cancelled")
         except Exception as e:
