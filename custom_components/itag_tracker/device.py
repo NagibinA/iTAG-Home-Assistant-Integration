@@ -1,4 +1,4 @@
-"""iTAG device handler - persistent connection with battery notifications."""
+"""iTAG device handler - with synthetic CCCD injection."""
 from __future__ import annotations
 
 import asyncio
@@ -10,6 +10,7 @@ from homeassistant.core import HomeAssistant
 
 from .const import (
     BATTERY_CHAR_UUID,
+    BUTTON_CHAR_UUID,
     CONNECT_TIMEOUT,
     RSSI_OFFLINE_VALUE,
 )
@@ -18,7 +19,7 @@ _LOGGER = logging.getLogger(__name__)
 
 
 class ITAGDevice:
-    """Representation of iTAG device with persistent connection."""
+    """Representation of iTAG device with synthetic CCCD."""
 
     def __init__(self, hass: HomeAssistant, mac: str, name: str) -> None:
         self.hass = hass
@@ -26,6 +27,7 @@ class ITAGDevice:
         self.name = name
         self._rssi = None
         self._battery = None
+        self._button_pressed = False
         self._available = False
         self._client = None
         self._is_connected = False
@@ -39,6 +41,10 @@ class ITAGDevice:
     @property
     def battery(self) -> int | None:
         return self._battery
+
+    @property
+    def button_pressed(self) -> bool:
+        return self._button_pressed
 
     @property
     def available(self) -> bool:
@@ -58,7 +64,7 @@ class ITAGDevice:
             )
 
             if self._device and not self._is_connected and (self._read_task is None or self._read_task.done()):
-                _LOGGER.info("Starting persistent connection with battery notifications...")
+                _LOGGER.info("Starting persistent connection...")
                 self._read_task = asyncio.create_task(self._persistent_connection())
         else:
             self._rssi = RSSI_OFFLINE_VALUE
@@ -66,64 +72,85 @@ class ITAGDevice:
 
         return self._get_data_dict()
 
-    def _battery_callback(self, sender: int, data: bytearray) -> None:
-        """Callback when battery notification is received."""
-        if data and len(data) > 0:
-            new_battery = data[0]
-            # iTAG may send placeholder 100% first, filter it
-            if new_battery == 100 and self._battery is not None and self._battery < 100:
-                _LOGGER.debug("Ignoring placeholder 100%% notification (real is %s%%)", self._battery)
-                return
-
-            if self._battery != new_battery:
-                self._battery = new_battery
-                _LOGGER.info("🔋 Battery notification: %s%%", self._battery)
-        else:
-            _LOGGER.debug("Empty battery notification received")
-
-    async def _enable_battery_notifications(self) -> bool:
+    async def _inject_cccd(self, char_uuid: str) -> bool:
         """
-        Enable battery notifications.
-        Tries standard method first, then fallback without CCCD check.
+        Inject synthetic CCCD descriptor into characteristic.
+        Bypasses Bleak's CCCD check, allowing notification subscription even without physical CCCD.
         """
         try:
-            # Try standard notify
-            await self._client.start_notify(BATTERY_CHAR_UUID, self._battery_callback)
-            _LOGGER.info("Battery notifications enabled successfully")
-            return True
-        except Exception as e:
-            _LOGGER.debug("Standard notify failed: %s", e)
-
-            # Try fallback - get characteristic and try to enable notifications directly
-            try:
-                char = self._client.services.get_characteristic(BATTERY_CHAR_UUID)
-                if not char:
-                    _LOGGER.debug("Battery characteristic not found")
-                    return False
-
-                # Try to start notify without CCCD check (some devices work this way)
-                await self._client.start_notify(char, self._battery_callback)
-                _LOGGER.info("Battery notifications enabled via direct characteristic")
-                return True
-
-            except Exception as e2:
-                _LOGGER.debug("Fallback notify also failed: %s", e2)
+            # Get characteristic
+            char = self._client.services.get_characteristic(char_uuid)
+            if not char:
+                _LOGGER.debug("Characteristic %s not found", char_uuid)
                 return False
 
-    async def _battery_poll_fallback(self) -> None:
-        """Fallback: read battery via polling if notifications don't work."""
-        try:
-            battery_data = await self._client.read_gatt_char(BATTERY_CHAR_UUID)
-            if battery_data and len(battery_data) > 0:
-                value = battery_data[0]
-                if self._battery != value:
-                    self._battery = value
-                    _LOGGER.info("Battery (poll fallback): %s%%", self._battery)
+            # Check if CCCD already exists
+            for descriptor in char.descriptors:
+                if descriptor.uuid == "00002902-0000-1000-8000-00805f9b34fb":
+                    _LOGGER.debug("CCCD already exists for %s", char_uuid)
+                    return True
+
+            # Create synthetic CCCD descriptor
+            from bleak.backends.characteristic import BleakGATTCharacteristic
+            from bleak.backends.descriptor import BleakGATTDescriptor
+
+            cccd = BleakGATTDescriptor(
+                char._backend,
+                handle=char.handle + 1,
+                uuid="00002902-0000-1000-8000-00805f9b34fb",
+                characteristic=char,
+            )
+            char.descriptors.append(cccd)
+            _LOGGER.info("Synthetic CCCD injected for %s", char_uuid)
+            return True
+
         except Exception as e:
-            _LOGGER.debug("Battery poll error: %s", e)
+            _LOGGER.debug("Failed to inject CCCD for %s: %s", char_uuid, e)
+            return False
+
+    async def _subscribe_with_cccd_injection(self, char_uuid: str, callback) -> bool:
+        """Subscribe to notifications with CCCD injection if needed."""
+        try:
+            await self._client.start_notify(char_uuid, callback)
+            _LOGGER.info("Subscribed to %s normally", char_uuid)
+            return True
+        except Exception as e:
+            _LOGGER.debug("Normal subscribe failed for %s: %s", char_uuid, e)
+
+            # If failed - inject CCCD and try again
+            if await self._inject_cccd(char_uuid):
+                try:
+                    await self._client.start_notify(char_uuid, callback)
+                    _LOGGER.info("Subscribed to %s after CCCD injection", char_uuid)
+                    return True
+                except Exception as e2:
+                    _LOGGER.debug("Subscribe after injection still failed: %s", e2)
+
+            return False
+
+    def _battery_callback(self, sender: int, data: bytearray) -> None:
+        """Battery notification callback."""
+        if data and len(data) > 0:
+            value = data[0]
+            # Filter out placeholder 100% if we already have a real value
+            if value == 100 and self._battery is not None and self._battery < 100:
+                _LOGGER.debug("Ignoring placeholder 100%% battery notification")
+                return
+            if self._battery != value:
+                self._battery = value
+                _LOGGER.info("🔋 Battery notification: %s%%", self._battery)
+
+    def _button_callback(self, sender: int, data: bytearray) -> None:
+        """Button notification callback."""
+        if data and len(data) > 0:
+            value = data[0]
+            old_state = self._button_pressed
+            self._button_pressed = (value == 0x01)
+            if old_state != self._button_pressed:
+                _LOGGER.info("🔘 Button: %s", "PRESSED" if self._button_pressed else "released")
 
     async def _persistent_connection(self) -> None:
-        """Maintain connection with battery notifications."""
+        """Maintain connection with synthetic CCCD."""
         try:
             _LOGGER.info("Connecting to %s...", self.mac)
             self._client = await establish_connection(
@@ -140,40 +167,63 @@ class ITAGDevice:
                 return
 
             self._is_connected = True
-            _LOGGER.info("Connected! Enabling battery notifications...")
+            _LOGGER.info("Connected! Subscribing to battery notifications...")
 
-            # Try to enable battery notifications
-            notifications_enabled = await self._enable_battery_notifications()
+            # Subscribe to battery with CCCD injection
+            battery_ok = await self._subscribe_with_cccd_injection(
+                BATTERY_CHAR_UUID, self._battery_callback
+            )
 
-            if notifications_enabled:
-                _LOGGER.info("Battery notifications active - values will update automatically")
-
-                # Wait a bit then do an initial poll to get current value
+            if battery_ok:
+                _LOGGER.info("Battery notifications active!")
+                # Initial poll to get current value
                 await asyncio.sleep(3)
-                await self._battery_poll_fallback()
+                try:
+                    data = await self._client.read_gatt_char(BATTERY_CHAR_UUID)
+                    if data and len(data) > 0:
+                        self._battery = data[0]
+                        _LOGGER.info("Initial battery: %s%%", self._battery)
+                except Exception as e:
+                    _LOGGER.debug("Initial battery poll: %s", e)
             else:
-                _LOGGER.warning("Battery notifications not available, falling back to polling every 60s")
+                _LOGGER.warning("Battery notifications not available, will poll")
 
-            # Keep connection alive loop
+            # Subscribe to button with CCCD injection
+            button_ok = await self._subscribe_with_cccd_injection(
+                BUTTON_CHAR_UUID, self._button_callback
+            )
+            if button_ok:
+                _LOGGER.info("Button notifications active! Press the button.")
+            else:
+                _LOGGER.warning("Button notifications not available")
+
+            # Keep-alive loop
             last_poll = 0
-
             while self._is_connected:
-                # Check if device is still advertising
                 service_info = bluetooth.async_last_service_info(
                     self.hass, self.mac, connectable=True
                 )
                 if not service_info or service_info.rssi is None:
-                    _LOGGER.info("Device disappeared, closing connection...")
+                    _LOGGER.info("Device disappeared, closing...")
                     break
 
-                # If notifications are not working, fall back to polling
-                if not notifications_enabled:
+                self._rssi = service_info.rssi
+
+                # If notifications don't work - fallback to polling every 60 seconds
+                if not battery_ok:
                     now = asyncio.get_event_loop().time()
                     if now - last_poll >= 60:
                         last_poll = now
-                        await self._battery_poll_fallback()
+                        try:
+                            data = await self._client.read_gatt_char(BATTERY_CHAR_UUID)
+                            if data and len(data) > 0 and data[0] < 100:
+                                if self._battery != data[0]:
+                                    self._battery = data[0]
+                                    _LOGGER.info("Battery (poll): %s%%", self._battery)
+                        except Exception:
+                            pass
 
-                await asyncio.sleep(10)
+                await asyncio.sleep(30)
 
         except asyncio.CancelledError:
             _LOGGER.debug("Connection task cancelled")
@@ -205,5 +255,6 @@ class ITAGDevice:
         return {
             "rssi": self._rssi,
             "battery": self._battery,
+            "button_pressed": self._button_pressed,
             "available": self._available,
         }
