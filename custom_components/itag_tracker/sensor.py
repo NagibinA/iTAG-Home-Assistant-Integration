@@ -9,7 +9,7 @@ from homeassistant.helpers.entity_platform import AddEntitiesCallback
 from homeassistant.helpers.update_coordinator import CoordinatorEntity
 
 from . import ITAGDataUpdateCoordinator
-from .const import DOMAIN
+from .const import DOMAIN, RSSI_OFFLINE_VALUE
 from .icons import get_icon
 
 
@@ -31,7 +31,7 @@ async def async_setup_entry(
 class ITAGRSSISensor(CoordinatorEntity, SensorEntity):
     """Representation of iTAG RSSI sensor."""
 
-    def __init__(self, coordinator: ITAGDataUpdateCoordinator) -> None:
+    def __init__(self, coordinator):
         super().__init__(coordinator)
         self.coordinator = coordinator
         self._attr_unique_id = f"{coordinator.device.mac}_rssi"
@@ -43,8 +43,8 @@ class ITAGRSSISensor(CoordinatorEntity, SensorEntity):
     @property
     def native_value(self) -> int | None:
         if not self.coordinator.data:
-            return None
-        return self.coordinator.data.get("rssi")
+            return RSSI_OFFLINE_VALUE
+        return self.coordinator.data.get("rssi", RSSI_OFFLINE_VALUE)
     
     @property
     def icon(self) -> str:
@@ -52,7 +52,7 @@ class ITAGRSSISensor(CoordinatorEntity, SensorEntity):
 
     @property
     def available(self) -> bool:
-        return self.coordinator.last_update_success
+        return True  # Всегда доступен, показывает -120 при отсутствии сигнала
 
     @callback
     def _handle_coordinator_update(self) -> None:
@@ -62,7 +62,7 @@ class ITAGRSSISensor(CoordinatorEntity, SensorEntity):
 class ITAGBatterySensor(CoordinatorEntity, SensorEntity):
     """Representation of iTAG battery sensor."""
 
-    def __init__(self, coordinator: ITAGDataUpdateCoordinator) -> None:
+    def __init__(self, coordinator):
         super().__init__(coordinator)
         self._attr_unique_id = f"{coordinator.device.mac}_battery"
         self._attr_name = f"{coordinator.device.name} Battery"
