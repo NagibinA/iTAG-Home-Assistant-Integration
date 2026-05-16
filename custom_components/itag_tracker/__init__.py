@@ -45,7 +45,7 @@ async def async_unload_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     data = hass.data[DOMAIN].get(entry.entry_id)
     if data and data.get("device"):
         await data["device"].stop()
-    
+
     if unload_ok := await hass.config_entries.async_unload_platforms(entry, ["device_tracker", "sensor"]):
         hass.data[DOMAIN].pop(entry.entry_id)
 
