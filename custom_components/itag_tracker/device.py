@@ -1,4 +1,4 @@
-"""iTAG device handler - persistent connection with button polling."""
+"""iTAG device handler - persistent connection with polling."""
 from __future__ import annotations
 
 import asyncio
@@ -18,8 +18,6 @@ _LOGGER = logging.getLogger(__name__)
 
 
 class ITAGDevice:
-    """Representation of iTAG device with persistent connection."""
-
     def __init__(self, hass: HomeAssistant, mac: str, name: str) -> None:
         self.hass = hass
         self.mac = mac
@@ -50,7 +48,7 @@ class ITAGDevice:
         return self._available
 
     async def update(self) -> dict:
-        """Update device data - called every 30 seconds for RSSI only."""
+        """Update RSSI - called every 30 seconds."""
         service_info = bluetooth.async_last_service_info(
             self.hass, self.mac, connectable=True
         )
@@ -71,9 +69,9 @@ class ITAGDevice:
         return self._get_data_dict()
 
     async def _persistent_connection(self) -> None:
-        """Maintain persistent connection and poll button every second."""
+        """Maintain connection, poll battery and button."""
         try:
-            _LOGGER.info("Connecting to %s with retry...", self.mac)
+            _LOGGER.info("Connecting to %s...", self.mac)
             self._client = await establish_connection(
                 BleakClient,
                 self._device,
@@ -89,30 +87,38 @@ class ITAGDevice:
                 return
             
             self._is_connected = True
-            _LOGGER.info("Connected! Polling button every second...")
+            _LOGGER.info("Connected! Polling...")
             
-            # Читаем батарею один раз при подключении
-            try:
-                battery_data = await self._client.read_gatt_char(BATTERY_SERVICE_UUID)
-                if battery_data and len(battery_data) > 0:
-                    self._battery = battery_data[0]
-                    _LOGGER.info("Battery: %s%%", self._battery)
-            except Exception as e:
-                _LOGGER.debug("Battery read error: %s", e)
+            last_battery_read = 0
             
-            # Цикл чтения кнопки
             while self._is_connected:
+                now = asyncio.get_event_loop().time()
+                
+                # Батарея раз в 60 секунд
+                if now - last_battery_read >= 60:
+                    last_battery_read = now
+                    try:
+                        raw = await self._client.read_gatt_char(BATTERY_SERVICE_UUID)
+                        if raw and len(raw) > 0:
+                            new_battery = raw[0]  # Значение уже в процентах
+                            if self._battery != new_battery:
+                                self._battery = new_battery
+                                _LOGGER.info("Battery: %s%%", self._battery)
+                    except Exception as e:
+                        _LOGGER.debug("Battery poll error: %s", e)
+                
+                # Кнопка каждую секунду
                 try:
-                    button_data = await self._client.read_gatt_char(BUTTON_SERVICE_UUID)
-                    if button_data and len(button_data) > 0:
-                        old_state = self._button_pressed
-                        self._button_pressed = button_data[0] == 1
-                        if old_state != self._button_pressed:
+                    button_raw = await self._client.read_gatt_char(BUTTON_SERVICE_UUID)
+                    if button_raw and len(button_raw) > 0:
+                        new_state = button_raw[0] == 1
+                        if self._button_pressed != new_state:
+                            self._button_pressed = new_state
                             _LOGGER.warning("🔘 BUTTON: %s", "PRESSED" if self._button_pressed else "released")
                 except Exception as e:
                     _LOGGER.debug("Button poll error: %s", e)
                 
-                await asyncio.sleep(1)  # Проверяем кнопку каждую секунду
+                await asyncio.sleep(1)
                 
         except asyncio.CancelledError:
             _LOGGER.debug("Connection task cancelled")
