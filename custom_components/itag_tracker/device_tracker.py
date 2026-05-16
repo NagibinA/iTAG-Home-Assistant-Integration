@@ -32,7 +32,7 @@ class ITAGDeviceTracker(CoordinatorEntity, TrackerEntity):
         super().__init__(coordinator)
         self.coordinator = coordinator
         self._attr_unique_id = f"{coordinator.device.mac}_tracker"
-        self._attr_name = f"{coordinator.device.name} Presence"
+        self._attr_name = f"{coordinator.device.name} Присутствие"
         self._attr_device_info = coordinator.device_info
         self._attr_icon = "mdi:bluetooth"
 
@@ -48,7 +48,6 @@ class ITAGDeviceTracker(CoordinatorEntity, TrackerEntity):
         
         rssi = self.coordinator.data.get("rssi", RSSI_OFFLINE_VALUE)
         
-        # Если RSSI выше порога - устройство дома
         if rssi > RSSI_PRESENCE_THRESHOLD:
             return "home"
         return "not_home"
