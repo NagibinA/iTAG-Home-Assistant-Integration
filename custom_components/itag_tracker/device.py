@@ -1,4 +1,4 @@
-"""iTAG device handler - persistent connection with polling."""
+"""iTAG device handler - persistent connection with battery polling."""
 from __future__ import annotations
 
 import asyncio
@@ -10,7 +10,6 @@ from homeassistant.core import HomeAssistant
 
 from .const import (
     BATTERY_SERVICE_UUID,
-    BUTTON_SERVICE_UUID,
     CONNECT_TIMEOUT,
 )
 
@@ -18,13 +17,14 @@ _LOGGER = logging.getLogger(__name__)
 
 
 class ITAGDevice:
+    """Representation of iTAG device with persistent connection."""
+
     def __init__(self, hass: HomeAssistant, mac: str, name: str) -> None:
         self.hass = hass
         self.mac = mac
         self.name = name
         self._rssi = None
         self._battery = None
-        self._button_pressed = False
         self._available = False
         self._client = None
         self._is_connected = False
@@ -38,10 +38,6 @@ class ITAGDevice:
     @property
     def battery(self) -> int | None:
         return self._battery
-
-    @property
-    def button_pressed(self) -> bool:
-        return self._button_pressed
 
     @property
     def available(self) -> bool:
@@ -60,8 +56,7 @@ class ITAGDevice:
                 self.hass, self.mac, connectable=True
             )
             
-            # Всегда перезапускаем задачу, если устройство видно
-            if self._device and (self._read_task is None or self._read_task.done()):
+            if self._device and not self._is_connected and (self._read_task is None or self._read_task.done()):
                 _LOGGER.info("Starting persistent connection...")
                 self._read_task = asyncio.create_task(self._persistent_connection())
         else:
@@ -70,104 +65,59 @@ class ITAGDevice:
         return self._get_data_dict()
 
     async def _persistent_connection(self) -> None:
-        """Maintain connection, poll battery and button."""
-        while True:
-            try:
-                # Проверяем, видно ли устройство
+        """Maintain connection and poll battery."""
+        try:
+            _LOGGER.info("Connecting to %s...", self.mac)
+            self._client = await establish_connection(
+                BleakClient,
+                self._device,
+                self.name,
+                max_attempts=3,
+                timeout=CONNECT_TIMEOUT,
+            )
+            
+            if not self._client.is_connected:
+                _LOGGER.error("Failed to connect")
+                self._is_connected = False
+                return
+            
+            self._is_connected = True
+            _LOGGER.info("Connected! Battery updates every 60 seconds.")
+            
+            while self._is_connected:
                 service_info = bluetooth.async_last_service_info(
                     self.hass, self.mac, connectable=True
                 )
-                
                 if not service_info or service_info.rssi is None:
-                    _LOGGER.debug("Device not visible, waiting...")
-                    await asyncio.sleep(5)
-                    continue
+                    _LOGGER.info("Device disappeared, closing connection...")
+                    break
                 
-                self._rssi = service_info.rssi
-                self._device = bluetooth.async_ble_device_from_address(
-                    self.hass, self.mac, connectable=True
-                )
+                try:
+                    battery_data = await self._client.read_gatt_char(BATTERY_SERVICE_UUID)
+                    if battery_data and len(battery_data) > 0:
+                        new_battery = battery_data[0]
+                        if self._battery != new_battery:
+                            self._battery = new_battery
+                            _LOGGER.info("Battery: %s%%", new_battery)
+                except Exception as e:
+                    _LOGGER.debug("Battery read error: %s", e)
                 
-                if not self._device:
-                    await asyncio.sleep(5)
-                    continue
+                await asyncio.sleep(60)
                 
-                _LOGGER.info("Connecting to %s...", self.mac)
-                self._client = await establish_connection(
-                    BleakClient,
-                    self._device,
-                    self.name,
-                    max_attempts=3,
-                    timeout=CONNECT_TIMEOUT,
-                )
-                
-                if not self._client.is_connected:
-                    _LOGGER.error("Failed to connect")
-                    await asyncio.sleep(10)
-                    continue
-                
-                self._is_connected = True
-                _LOGGER.info("Connected! Starting polling...")
-                
-                last_battery_read = 0
-                
-                # Цикл опроса ПОКА соединение открыто
-                while self._is_connected:
-                    # Проверяем, живо ли устройство
-                    service_info = bluetooth.async_last_service_info(
-                        self.hass, self.mac, connectable=True
-                    )
-                    if not service_info or service_info.rssi is None:
-                        _LOGGER.info("Device disappeared, closing connection...")
-                        break
-                    
-                    now = asyncio.get_event_loop().time()
-                    
-                    # Батарея раз в 60 секунд
-                    if now - last_battery_read >= 60:
-                        last_battery_read = now
-                        try:
-                            raw = await self._client.read_gatt_char(BATTERY_SERVICE_UUID)
-                            if raw and len(raw) > 0:
-                                new_battery = raw[0]
-                                if self._battery != new_battery:
-                                    self._battery = new_battery
-                                    _LOGGER.info("Battery: %s%%", self._battery)
-                        except Exception as e:
-                            _LOGGER.debug("Battery poll error: %s", e)
-                    
-                    # Кнопка каждую секунду
-                    try:
-                        button_raw = await self._client.read_gatt_char(BUTTON_SERVICE_UUID)
-                        if button_raw and len(button_raw) > 0:
-                            new_state = button_raw[0] == 1
-                            if self._button_pressed != new_state:
-                                self._button_pressed = new_state
-                                _LOGGER.warning("🔘 BUTTON: %s", "PRESSED" if self._button_pressed else "released")
-                    except Exception as e:
-                        _LOGGER.debug("Button poll error: %s", e)
-                    
-                    await asyncio.sleep(1)
-                
-            except asyncio.CancelledError:
-                _LOGGER.debug("Connection task cancelled")
-                break
-            except Exception as e:
-                _LOGGER.error("Connection error: %s", e)
-            finally:
-                if self._client and self._client.is_connected:
-                    try:
-                        await self._client.disconnect()
-                        _LOGGER.info("Disconnected")
-                    except:
-                        pass
-                self._client = None
-                self._is_connected = False
-            
-            # Пауза перед попыткой переподключения
-            await asyncio.sleep(5)
-        
-        self._read_task = None
+        except asyncio.CancelledError:
+            _LOGGER.debug("Connection task cancelled")
+        except Exception as e:
+            _LOGGER.error("Connection error: %s", e)
+        finally:
+            if self._client and self._client.is_connected:
+                try:
+                    await self._client.disconnect()
+                    _LOGGER.info("Disconnected")
+                except:
+                    pass
+            self._is_connected = False
+            self._client = None
+            self._read_task = None
 
     async def stop(self) -> None:
         """Stop persistent connection."""
@@ -184,6 +134,5 @@ class ITAGDevice:
         return {
             "rssi": self._rssi,
             "battery": self._battery,
-            "button_pressed": self._button_pressed,
             "available": self._available,
         }
