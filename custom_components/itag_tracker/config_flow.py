@@ -37,7 +37,7 @@ class ITAGConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
             )
 
         discovered = async_discovered_service_info(self.hass)
-        devices = {"manual": "Enter MAC address manually"}
+        devices = {"manual": "Ввести MAC-адрес вручную"}
         
         for discovery in discovered:
             address = discovery.address
