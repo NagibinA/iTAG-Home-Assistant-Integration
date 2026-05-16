@@ -15,7 +15,7 @@ from .device import ITAGDevice
 
 _LOGGER = logging.getLogger(__name__)
 
-SCAN_INTERVAL = timedelta(seconds=3)  # 3 секунды для баланса
+SCAN_INTERVAL = timedelta(seconds=30)
 
 
 async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
@@ -42,6 +42,10 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
 
 async def async_unload_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     """Unload a config entry."""
+    data = hass.data[DOMAIN].get(entry.entry_id)
+    if data and data.get("device"):
+        await data["device"].stop()
+    
     if unload_ok := await hass.config_entries.async_unload_platforms(entry, ["device_tracker", "sensor"]):
         hass.data[DOMAIN].pop(entry.entry_id)
 
