@@ -19,14 +19,14 @@ async def async_setup_entry(
     """Set up iTAG device tracker based on a config entry."""
     data = hass.data[DOMAIN][entry.entry_id]
     coordinator = data["coordinator"]
-    
+
     async_add_entities([ITAGDeviceTracker(coordinator)])
 
 
 class ITAGDeviceTracker(CoordinatorEntity, TrackerEntity):
     """Representation of iTAG device tracker."""
 
-    def __init__(self, coordinator):
+    def __init__(self, coordinator: ITAGDataUpdateCoordinator) -> None:
         super().__init__(coordinator)
         self.coordinator = coordinator
         self._attr_unique_id = f"{coordinator.device.mac}_tracker"
@@ -43,15 +43,13 @@ class ITAGDeviceTracker(CoordinatorEntity, TrackerEntity):
         """Return home if device is advertising."""
         if not self.coordinator.data:
             return "not_home"
-        
-        # Устройство считается дома, если available=True и RSSI выше минимального порога
+
         available = self.coordinator.data.get("available", False)
         rssi = self.coordinator.data.get("rssi", RSSI_OFFLINE_VALUE)
-        
-        # Если RSSI близок к минимальному значению - устройство недоступно
+
         if not available or rssi <= RSSI_OFFLINE_VALUE + 10:
             return "not_home"
-        
+
         return "home"
 
     @property
