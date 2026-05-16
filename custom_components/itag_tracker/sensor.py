@@ -1,4 +1,4 @@
-"""Sensors for iTAG - RSSI and battery."""
+"""Sensors for iTAG - RSSI, battery and button."""
 from __future__ import annotations
 
 from homeassistant.components.sensor import SensorDeviceClass, SensorEntity
@@ -23,6 +23,7 @@ async def async_setup_entry(
     entities = [
         ITAGRSSISensor(coordinator),
         ITAGBatterySensor(coordinator),
+        ITAGButtonSensor(coordinator),  # [НОВЫЙ] сенсор кнопки
     ]
 
     async_add_entities(entities)
@@ -83,6 +84,34 @@ class ITAGBatterySensor(CoordinatorEntity, SensorEntity):
     @property
     def available(self) -> bool:
         return self.coordinator.last_update_success and self.coordinator.data is not None
+
+    @callback
+    def _handle_coordinator_update(self) -> None:
+        self.async_write_ha_state()
+
+
+class ITAGButtonSensor(CoordinatorEntity, SensorEntity):  # [НОВЫЙ] сенсор кнопки
+    """Representation of iTAG button sensor."""
+
+    def __init__(self, coordinator: ITAGDataUpdateCoordinator) -> None:
+        super().__init__(coordinator)
+        self._attr_unique_id = f"{coordinator.device.mac}_button"
+        self._attr_name = f"{coordinator.device.name} Button"
+        self._attr_device_info = coordinator.device_info
+
+    @property
+    def native_value(self) -> str:
+        if not self.coordinator.data:
+            return "unknown"
+        return "pressed" if self.coordinator.data.get("button_pressed") else "normal"
+
+    @property
+    def icon(self) -> str:
+        return "mdi:gesture-tap-button"
+
+    @property
+    def available(self) -> bool:
+        return self.coordinator.last_update_success
 
     @callback
     def _handle_coordinator_update(self) -> None:
