@@ -31,7 +31,6 @@ class ITAGDevice:
     async def update(self) -> dict:
         """Update device data from advertisement packets only."""
         try:
-            # Получаем RSSI из рекламных данных
             service_info = bluetooth.async_last_service_info(
                 self.hass, self.mac, connectable=True
             )
