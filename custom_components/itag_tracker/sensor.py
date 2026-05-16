@@ -1,16 +1,15 @@
-"""Sensors for iTAG - RSSI, battery and button."""
+"""Sensors for iTAG - RSSI only."""
 from __future__ import annotations
 
 from homeassistant.components.sensor import SensorDeviceClass, SensorEntity
 from homeassistant.config_entries import ConfigEntry
-from homeassistant.const import PERCENTAGE, SIGNAL_STRENGTH_DECIBELS
+from homeassistant.const import SIGNAL_STRENGTH_DECIBELS
 from homeassistant.core import HomeAssistant, callback
 from homeassistant.helpers.entity_platform import AddEntitiesCallback
 from homeassistant.helpers.update_coordinator import CoordinatorEntity
 
 from . import ITAGDataUpdateCoordinator
 from .const import DOMAIN, RSSI_OFFLINE_VALUE
-from .icons import get_icon
 
 
 async def async_setup_entry(
@@ -19,20 +18,15 @@ async def async_setup_entry(
     """Set up iTAG sensors based on a config entry."""
     data = hass.data[DOMAIN][entry.entry_id]
     coordinator = data["coordinator"]
-
-    entities = [
-        ITAGRSSISensor(coordinator),
-        ITAGBatterySensor(coordinator),
-        ITAGButtonSensor(coordinator),  # [НОВЫЙ] сенсор кнопки
-    ]
-
-    async_add_entities(entities)
+    
+    async_add_entities([ITAGRSSISensor(coordinator)])
 
 
 class ITAGRSSISensor(CoordinatorEntity, SensorEntity):
     """Representation of iTAG RSSI sensor."""
 
     def __init__(self, coordinator: ITAGDataUpdateCoordinator) -> None:
+        """Initialize the RSSI sensor."""
         super().__init__(coordinator)
         self.coordinator = coordinator
         self._attr_unique_id = f"{coordinator.device.mac}_rssi"
@@ -40,79 +34,21 @@ class ITAGRSSISensor(CoordinatorEntity, SensorEntity):
         self._attr_device_class = SensorDeviceClass.SIGNAL_STRENGTH
         self._attr_native_unit_of_measurement = SIGNAL_STRENGTH_DECIBELS
         self._attr_device_info = coordinator.device_info
+        self._attr_icon = "mdi:signal"  # Простая иконка без логики
 
     @property
     def native_value(self) -> int | None:
+        """Return the RSSI value."""
         if not self.coordinator.data:
             return RSSI_OFFLINE_VALUE
         return self.coordinator.data.get("rssi", RSSI_OFFLINE_VALUE)
 
     @property
-    def icon(self) -> str:
-        return get_icon("rssi_sensor", self.native_value)
-
-    @property
     def available(self) -> bool:
-        return True
-
-    @callback
-    def _handle_coordinator_update(self) -> None:
-        self.async_write_ha_state()
-
-
-class ITAGBatterySensor(CoordinatorEntity, SensorEntity):
-    """Representation of iTAG battery sensor."""
-
-    def __init__(self, coordinator: ITAGDataUpdateCoordinator) -> None:
-        super().__init__(coordinator)
-        self._attr_unique_id = f"{coordinator.device.mac}_battery"
-        self._attr_name = f"{coordinator.device.name} Battery"
-        self._attr_device_class = SensorDeviceClass.BATTERY
-        self._attr_native_unit_of_measurement = PERCENTAGE
-        self._attr_device_info = coordinator.device_info
-
-    @property
-    def native_value(self) -> int | None:
-        if not self.coordinator.data:
-            return None
-        return self.coordinator.data.get("battery")
-
-    @property
-    def icon(self) -> str:
-        return get_icon("battery_sensor", self.native_value)
-
-    @property
-    def available(self) -> bool:
-        return self.coordinator.last_update_success and self.coordinator.data is not None
-
-    @callback
-    def _handle_coordinator_update(self) -> None:
-        self.async_write_ha_state()
-
-
-class ITAGButtonSensor(CoordinatorEntity, SensorEntity):  # [НОВЫЙ] сенсор кнопки
-    """Representation of iTAG button sensor."""
-
-    def __init__(self, coordinator: ITAGDataUpdateCoordinator) -> None:
-        super().__init__(coordinator)
-        self._attr_unique_id = f"{coordinator.device.mac}_button"
-        self._attr_name = f"{coordinator.device.name} Button"
-        self._attr_device_info = coordinator.device_info
-
-    @property
-    def native_value(self) -> str:
-        if not self.coordinator.data:
-            return "unknown"
-        return "pressed" if self.coordinator.data.get("button_pressed") else "normal"
-
-    @property
-    def icon(self) -> str:
-        return "mdi:gesture-tap-button"
-
-    @property
-    def available(self) -> bool:
+        """Return True if entity is available."""
         return self.coordinator.last_update_success
 
     @callback
     def _handle_coordinator_update(self) -> None:
+        """Handle updated data from the coordinator."""
         self.async_write_ha_state()
