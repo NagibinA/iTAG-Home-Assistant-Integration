@@ -24,7 +24,7 @@ class ITAGConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
             address = user_input[CONF_ADDRESS]
             if address == "manual":
                 return await self.async_step_manual()
-            
+
             await self.async_set_unique_id(address)
             self._abort_if_unique_id_configured()
 
@@ -38,7 +38,7 @@ class ITAGConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
 
         discovered = async_discovered_service_info(self.hass)
         devices = {"manual": "Enter MAC address manually"}
-        
+
         for discovery in discovered:
             address = discovery.address
             name = discovery.name or address
@@ -60,7 +60,7 @@ class ITAGConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
             address = user_input[CONF_ADDRESS]
             await self.async_set_unique_id(address)
             self._abort_if_unique_id_configured()
-            
+
             return self.async_create_entry(
                 title=user_input[CONF_NAME],
                 data={
@@ -68,10 +68,10 @@ class ITAGConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
                     CONF_NAME: user_input[CONF_NAME],
                 },
             )
-        
+
         data_schema = vol.Schema({
             vol.Required(CONF_ADDRESS): cv.string,
             vol.Required(CONF_NAME, default="iTAG"): cv.string,
         })
-        
+
         return self.async_show_form(step_id="manual", data_schema=data_schema)
