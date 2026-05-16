@@ -1,4 +1,4 @@
-"""iTAG device handler - persistent connection with delayed single read."""
+"""iTAG device handler - persistent connection with smart battery reading."""
 from __future__ import annotations
 
 import asyncio
@@ -31,6 +31,7 @@ class ITAGDevice:
         self._is_connected = False
         self._read_task = None
         self._device = None
+        self._battery_100_count = 0
 
     @property
     def rssi(self) -> int | None:
@@ -61,36 +62,32 @@ class ITAGDevice:
                 _LOGGER.info("Starting persistent connection...")
                 self._read_task = asyncio.create_task(self._persistent_connection())
         else:
-            # Устройство не видно - устанавливаем RSSI в минимальное значение
             self._rssi = RSSI_OFFLINE_VALUE
             self._available = False
 
         return self._get_data_dict()
 
-    async def _read_battery_with_delay(self) -> int | None:
-        """Request read, wait 3 seconds, then capture the real value."""
+    async def _read_battery_until_real(self) -> int | None:
+        """Read battery, discarding placeholder 100% values."""
         try:
-            # Отправляем запрос на чтение, но не ждем результат сразу
-            read_future = asyncio.create_task(
-                self._client.read_gatt_char(BATTERY_SERVICE_UUID)
-            )
+            for attempt in range(6):  # максимум 6 попыток (~6-8 секунд)
+                battery_data = await self._client.read_gatt_char(BATTERY_SERVICE_UUID)
+                if battery_data and len(battery_data) > 0:
+                    value = battery_data[0]
+                    if value < 100:
+                        if attempt > 0:
+                            _LOGGER.debug("Real battery value: %s%% (after %s attempts)", value, attempt + 1)
+                        return value
+                    else:
+                        _LOGGER.debug("Got placeholder 100%%, attempt %s/6, waiting...", attempt + 1)
+                await asyncio.sleep(1.5)  # Пауза между попытками
             
-            # Ждем 3 секунды, пока устройство подготовит реальное значение
-            await asyncio.sleep(3)
+            _LOGGER.warning("Failed to get real battery value after 6 attempts")
+            return None
             
-            # Теперь получаем результат (устройство уже должно ответить реальным значением)
-            battery_data = await read_future
-            
-            if battery_data and len(battery_data) > 0:
-                real_value = battery_data[0]
-                return real_value
-                
-        except asyncio.CancelledError:
-            _LOGGER.debug("Battery read cancelled")
         except Exception as e:
             _LOGGER.debug("Battery read error: %s", e)
-        
-        return None
+            return None
 
     async def _persistent_connection(self) -> None:
         """Maintain connection and poll battery."""
@@ -110,8 +107,15 @@ class ITAGDevice:
                 return
             
             self._is_connected = True
-            _LOGGER.info("Connected! Starting battery polling with 3s delay...")
+            _LOGGER.info("Connected! Starting smart battery polling...")
             
+            # Сразу читаем батарею после подключения
+            real_battery = await self._read_battery_until_real()
+            if real_battery is not None:
+                self._battery = real_battery
+                _LOGGER.info("Initial battery: %s%%", self._battery)
+            
+            # Цикл чтения батареи
             while self._is_connected:
                 # Проверяем, живо ли устройство
                 service_info = bluetooth.async_last_service_info(
@@ -121,21 +125,27 @@ class ITAGDevice:
                     _LOGGER.info("Device disappeared, closing connection...")
                     break
                 
-                # Читаем батарею: отправляем запрос, ждем 3 секунды, получаем реальное значение
-                real_battery = await self._read_battery_with_delay()
+                # Читаем батарею умным методом
+                real_battery = await self._read_battery_until_real()
                 
                 if real_battery is not None:
+                    # Защита от залипания
+                    if real_battery == 100:
+                        self._battery_100_count += 1
+                        if self._battery_100_count >= 4:
+                            _LOGGER.warning("Battery stuck at 100%%, forcing reconnection...")
+                            break
+                    else:
+                        self._battery_100_count = 0
+                    
                     if self._battery != real_battery:
                         self._battery = real_battery
-                        if real_battery == 100:
-                            _LOGGER.debug("Battery: %s%% (waiting for real value)", real_battery)
-                        else:
-                            _LOGGER.info("Battery: %s%%", self._battery)
+                        _LOGGER.info("Battery: %s%%", self._battery)
                 else:
                     _LOGGER.debug("Failed to read battery")
                 
-                # Пауза между циклами (60 секунд)
-                await asyncio.sleep(60)
+                # Пауза между циклами (30 секунд)
+                await asyncio.sleep(30)
                 
         except asyncio.CancelledError:
             _LOGGER.debug("Connection task cancelled")
