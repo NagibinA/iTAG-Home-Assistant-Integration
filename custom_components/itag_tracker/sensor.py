@@ -1,4 +1,4 @@
-"""Sensors for iTAG - RSSI and battery only."""
+"""Sensors for iTAG - RSSI and battery."""
 from __future__ import annotations
 
 from homeassistant.components.sensor import SensorDeviceClass, SensorEntity
@@ -19,19 +19,19 @@ async def async_setup_entry(
     """Set up iTAG sensors based on a config entry."""
     data = hass.data[DOMAIN][entry.entry_id]
     coordinator = data["coordinator"]
-    
+
     entities = [
         ITAGRSSISensor(coordinator),
         ITAGBatterySensor(coordinator),
     ]
-    
+
     async_add_entities(entities)
 
 
 class ITAGRSSISensor(CoordinatorEntity, SensorEntity):
     """Representation of iTAG RSSI sensor."""
 
-    def __init__(self, coordinator):
+    def __init__(self, coordinator: ITAGDataUpdateCoordinator) -> None:
         super().__init__(coordinator)
         self.coordinator = coordinator
         self._attr_unique_id = f"{coordinator.device.mac}_rssi"
@@ -45,14 +45,14 @@ class ITAGRSSISensor(CoordinatorEntity, SensorEntity):
         if not self.coordinator.data:
             return RSSI_OFFLINE_VALUE
         return self.coordinator.data.get("rssi", RSSI_OFFLINE_VALUE)
-    
+
     @property
     def icon(self) -> str:
         return get_icon("rssi_sensor", self.native_value)
 
     @property
     def available(self) -> bool:
-        return True  # Всегда доступен, показывает -120 при отсутствии сигнала
+        return True
 
     @callback
     def _handle_coordinator_update(self) -> None:
@@ -62,7 +62,7 @@ class ITAGRSSISensor(CoordinatorEntity, SensorEntity):
 class ITAGBatterySensor(CoordinatorEntity, SensorEntity):
     """Representation of iTAG battery sensor."""
 
-    def __init__(self, coordinator):
+    def __init__(self, coordinator: ITAGDataUpdateCoordinator) -> None:
         super().__init__(coordinator)
         self._attr_unique_id = f"{coordinator.device.mac}_battery"
         self._attr_name = f"{coordinator.device.name} Battery"
@@ -75,7 +75,7 @@ class ITAGBatterySensor(CoordinatorEntity, SensorEntity):
         if not self.coordinator.data:
             return None
         return self.coordinator.data.get("battery")
-    
+
     @property
     def icon(self) -> str:
         return get_icon("battery_sensor", self.native_value)
