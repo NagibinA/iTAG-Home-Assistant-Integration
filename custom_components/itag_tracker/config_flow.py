@@ -10,6 +10,7 @@ import homeassistant.helpers.config_validation as cv
 
 from .const import DOMAIN
 
+
 class ITAGConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
     """Handle a config flow for iTAG."""
 
@@ -35,14 +36,13 @@ class ITAGConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
                 },
             )
 
-        # Get discovered BLE devices - ищем "iTAG  "
         discovered = async_discovered_service_info(self.hass)
         devices = {"manual": "Enter MAC address manually"}
         
         for discovery in discovered:
             address = discovery.address
             name = discovery.name or address
-            if name == "iTAG  ":
+            if name.rstrip() == "iTAG":
                 devices[address] = f"{name} ({address})"
 
         data_schema = vol.Schema({
