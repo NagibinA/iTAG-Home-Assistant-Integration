@@ -1,7 +1,7 @@
 {
   "domain": "itag_tracker",
   "name": "iTAG BLE Tracker",
-  "version": "1.0.1",
+  "version": "1.0.2",
   "requirements": [],
   "dependencies": ["bluetooth"],
   "codeowners": ["@NagibinA"],
