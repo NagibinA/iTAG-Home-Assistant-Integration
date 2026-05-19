@@ -1,0 +1,25 @@
+{
+  "config": {
+    "step": {
+      "user": {
+        "title": "Добавить устройство iTAG",
+        "description": "Выберите устройство iTAG из списка или введите MAC-адрес вручную",
+        "data": {
+          "address": "MAC-адрес устройства",
+          "name": "Имя устройства"
+        }
+      },
+      "manual": {
+        "title": "Ручной ввод MAC-адреса",
+        "description": "Введите MAC-адрес вашего устройства iTAG",
+        "data": {
+          "address": "MAC-адрес (например, AA:BB:CC:DD:EE:FF)",
+          "name": "Имя устройства"
+        }
+      }
+    },
+    "abort": {
+      "already_configured": "Устройство уже добавлено"
+    }
+  }
+}
