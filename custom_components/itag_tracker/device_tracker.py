@@ -35,6 +35,8 @@ class ITAGDeviceTracker(CoordinatorEntity, TrackerEntity):
         self._attr_name = f"{coordinator.device.name} Присутствие"
         self._attr_device_info = coordinator.device_info
         self._attr_icon = "mdi:bluetooth"
+        self._attr_device_class = "presence"
+        # entity_category = None (основная сущность, не в диагностике)
 
     @property
     def source_type(self) -> SourceType:
