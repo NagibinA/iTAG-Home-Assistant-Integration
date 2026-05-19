@@ -1,4 +1,4 @@
-"""Sensors for iTAG - RSSI diagnostic."""
+"""Sensors for iTAG - RSSI only."""
 from __future__ import annotations
 
 from homeassistant.components.sensor import SensorDeviceClass, SensorEntity
@@ -23,7 +23,7 @@ async def async_setup_entry(
 
 
 class ITAGRSSISensor(CoordinatorEntity, SensorEntity):
-    """Representation of iTAG RSSI sensor - diagnostic."""
+    """Representation of iTAG RSSI sensor."""
 
     def __init__(self, coordinator: ITAGDataUpdateCoordinator) -> None:
         """Initialize the RSSI sensor."""
@@ -35,7 +35,6 @@ class ITAGRSSISensor(CoordinatorEntity, SensorEntity):
         self._attr_native_unit_of_measurement = SIGNAL_STRENGTH_DECIBELS
         self._attr_device_info = coordinator.device_info
         self._attr_icon = "mdi:signal"
-        self._attr_entity_category = "diagnostic"  # RSSI в диагностике
 
     @property
     def native_value(self) -> int | None:
