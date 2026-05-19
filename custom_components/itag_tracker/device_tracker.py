@@ -2,7 +2,7 @@
 from __future__ import annotations
 
 import logging
-from homeassistant.components.device_tracker import ScannerEntity
+from homeassistant.components.device_tracker import SourceType, TrackerEntity
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.core import HomeAssistant, callback
 from homeassistant.helpers.entity_platform import AddEntitiesCallback
@@ -24,7 +24,7 @@ async def async_setup_entry(
     async_add_entities([ITAGDeviceTracker(coordinator)])
 
 
-class ITAGDeviceTracker(CoordinatorEntity, ScannerEntity):
+class ITAGDeviceTracker(CoordinatorEntity, TrackerEntity):
     """Representation of iTAG device tracker."""
 
     def __init__(self, coordinator: ITAGDataUpdateCoordinator) -> None:
@@ -35,18 +35,19 @@ class ITAGDeviceTracker(CoordinatorEntity, ScannerEntity):
         self._attr_name = f"{coordinator.device.name} Присутствие"
         self._attr_device_info = coordinator.device_info
         self._attr_icon = "mdi:bluetooth"
+        self._attr_source_type = SourceType.BLUETOOTH
 
     @property
-    def is_connected(self) -> bool:
-        """Return true if device is advertising (RSSI above threshold)."""
+    def location_name(self) -> str | None:
+        """Return home if device is advertising."""
         if not self.coordinator.data:
-            return False
+            return None
         
         rssi = self.coordinator.data.get("rssi", RSSI_OFFLINE_VALUE)
         
         if rssi > RSSI_PRESENCE_THRESHOLD:
-            return True
-        return False
+            return "home"
+        return "not_home"
 
     @property
     def should_poll(self) -> bool:
