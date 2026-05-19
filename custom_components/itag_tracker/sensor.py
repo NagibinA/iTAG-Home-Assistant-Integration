@@ -1,15 +1,19 @@
 """Sensors for iTAG - RSSI only."""
 from __future__ import annotations
 
+import logging
 from homeassistant.components.sensor import SensorDeviceClass, SensorEntity
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.const import SIGNAL_STRENGTH_DECIBELS
 from homeassistant.core import HomeAssistant, callback
 from homeassistant.helpers.entity_platform import AddEntitiesCallback
 from homeassistant.helpers.update_coordinator import CoordinatorEntity
+from homeassistant.helpers.entity import EntityCategory
 
 from . import ITAGDataUpdateCoordinator
 from .const import DOMAIN, RSSI_OFFLINE_VALUE
+
+_LOGGER = logging.getLogger(__name__)
 
 
 async def async_setup_entry(
@@ -36,8 +40,8 @@ class ITAGRSSISensor(CoordinatorEntity, SensorEntity):
         self._attr_device_info = coordinator.device_info
         self._attr_icon = "mdi:signal"
         
-        # Переносим RSSI в диагностику
-        self._attr_entity_category = "diagnostic"
+        # Правильный способ: использовать Enum EntityCategory
+        self._attr_entity_category = EntityCategory.DIAGNOSTIC
 
     @property
     def native_value(self) -> int | None:
