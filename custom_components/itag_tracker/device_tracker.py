@@ -36,6 +36,9 @@ class ITAGDeviceTracker(CoordinatorEntity, TrackerEntity):
         self._attr_device_info = coordinator.device_info
         self._attr_icon = "mdi:bluetooth"
         self._attr_source_type = SourceType.BLUETOOTH
+        
+        # Явно указываем, что это основная сущность, а не диагностическая
+        self._attr_entity_category = None
 
     @property
     def location_name(self) -> str | None:
